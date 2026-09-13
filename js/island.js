@@ -1303,24 +1303,78 @@ export class SkyIsland {
     if (!blocksList || !Array.isArray(blocksList)) return;
     blocksList.forEach(b => {
       const rot = b.rotationAngle || b.rot || 0;
-      if (b.blockType === 'crafting_bench') {
+      const type = b.blockType || 'crafting_bench';
+
+      // Deduplicate: Skip if block already exists at position
+      const exists = this.placedStructures.some(s => Math.hypot(s.x - b.x, s.z - b.z) < 0.4 && s.type === type) ||
+                     this.placedCraftingTables.some(t => Math.hypot(t.x - b.x, t.z - b.z) < 0.4 && type === 'crafting_bench') ||
+                     this.placedBlocks.some(pb => Math.hypot(pb.x - b.x, pb.z - b.z) < 0.4);
+      if (exists) return;
+
+      if (type === 'crafting_bench') {
         this.placeCraftingBench(b.x, b.z);
-      } else if (b.blockType === 'wood_wall') {
+      } else if (type === 'wood_wall') {
         this.placeWoodWall(b.x, b.z, rot);
-      } else if (b.blockType === 'wood_wall_window') {
+      } else if (type === 'wood_wall_window') {
         this.placeWoodWallWindow(b.x, b.z, rot);
-      } else if (b.blockType === 'wood_wall_door') {
+      } else if (type === 'wood_wall_door') {
         this.placeWoodWallDoor(b.x, b.z, rot);
-      } else if (b.blockType === 'wood_floor') {
+      } else if (type === 'wood_floor') {
         this.placeWoodFloor(b.x, b.z, rot);
-      } else if (b.blockType === 'wood_roof') {
+      } else if (type === 'wood_roof') {
         this.placeWoodRoof(b.x, b.z, rot);
-      } else if (b.blockType === 'wood_box') {
+      } else if (type === 'wood_box') {
         this.placeWoodBox(b.x, b.z, rot);
       } else {
         this.placeWoodBlock(b.x, b.z);
       }
     });
+  }
+
+  /**
+   * Removes a placed block, crafting table, or structure at (x, z) from scene and physics
+   */
+  removeBlockAt(x, z, blockType) {
+    // 1. Check in placedCraftingTables
+    if (blockType === 'crafting_bench' || !blockType) {
+      const idx = this.placedCraftingTables.findIndex(t => Math.hypot(t.x - x, t.z - z) < 0.8);
+      if (idx !== -1) {
+        const table = this.placedCraftingTables[idx];
+        this.group.remove(table.group);
+        const cIdx = this.treeColliders.indexOf(table.collider);
+        if (cIdx !== -1) this.treeColliders.splice(cIdx, 1);
+        this.placedCraftingTables.splice(idx, 1);
+        return true;
+      }
+    }
+
+    // 2. Check in placedStructures
+    const sIdx = this.placedStructures.findIndex(s => Math.hypot(s.x - x, s.z - z) < 0.8 && (!blockType || s.type === blockType));
+    if (sIdx !== -1) {
+      const struct = this.placedStructures[sIdx];
+      this.group.remove(struct.mesh);
+      if (struct.collider) {
+        const cIdx = this.treeColliders.indexOf(struct.collider);
+        if (cIdx !== -1) this.treeColliders.splice(cIdx, 1);
+      }
+      this.placedStructures.splice(sIdx, 1);
+      return true;
+    }
+
+    // 3. Check in placedBlocks
+    const bIdx = this.placedBlocks.findIndex(b => Math.hypot(b.x - x, b.z - z) < 0.8);
+    if (bIdx !== -1) {
+      const block = this.placedBlocks[bIdx];
+      this.group.remove(block.mesh);
+      if (block.collider) {
+        const cIdx = this.treeColliders.indexOf(block.collider);
+        if (cIdx !== -1) this.treeColliders.splice(cIdx, 1);
+      }
+      this.placedBlocks.splice(bIdx, 1);
+      return true;
+    }
+
+    return false;
   }
 
   /**

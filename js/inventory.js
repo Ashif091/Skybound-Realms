@@ -835,6 +835,38 @@ export class InventorySystem {
     }
   }
 
+  dropAllItems(dropX, dropZ, dropY, itemDropManager, networkManager) {
+    if (this.isStorageOpen) this.closeStorageBox();
+    if (this.isTableOpen) this.closeCraftingTableModal();
+    if (this.isOpen) this.close();
+
+    let itemsDropped = false;
+    this.slots.forEach(slot => {
+      if (slot && slot.item && slot.item.count > 0) {
+        const itemType = slot.item.type;
+        const count = slot.item.count;
+        const rx = dropX + (Math.random() - 0.5) * 0.8;
+        const rz = dropZ + (Math.random() - 0.5) * 0.8;
+
+        if (itemDropManager) {
+          const dropId = itemDropManager.spawnLogDrop(rx, rz, dropY, count, null, itemType);
+          if (networkManager) {
+            networkManager.sendDropLog(dropId, rx, rz, dropY, count, itemType);
+          }
+        }
+        slot.item = null;
+        itemsDropped = true;
+      }
+    });
+
+    if (itemsDropped) {
+      this.updateUI();
+      if (networkManager) {
+        networkManager.sendSaveInventory(this.getSlots(), 0);
+      }
+    }
+  }
+
   getSlots() {
     return this.slots.map(slot => slot.item ? { ...slot.item } : null);
   }

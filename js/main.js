@@ -298,6 +298,7 @@ class GameApp {
         const dropId = this.itemDropManager.spawnLogDrop(benchRes.x, benchRes.z, benchRes.y, 1, null, 'crafting_bench');
         if (this.networkManager) {
           this.networkManager.sendDropLog(dropId, benchRes.x, benchRes.z, benchRes.y, 1, 'crafting_bench');
+          this.networkManager.sendBlockBroken(benchRes.x, benchRes.z, 'crafting_bench');
         }
       }
       return;
@@ -327,6 +328,9 @@ class GameApp {
           if (this.networkManager) {
             this.networkManager.sendDropLog(dropId, structRes.x, structRes.z, structRes.y, 1, structRes.itemType || 'log');
           }
+        }
+        if (this.networkManager) {
+          this.networkManager.sendBlockBroken(structRes.x, structRes.z, structRes.type || structRes.itemType || 'wood_box');
         }
       }
       return;
@@ -472,8 +476,28 @@ class GameApp {
       }
 
       if (this.playerHp <= 0) {
-        this.avatar.isDead = true;
+        if (!this.avatar.isDead) {
+          this.avatar.isDead = true;
+          this.handlePlayerDeath(false);
+        }
       }
+    }
+  }
+
+  handlePlayerDeath(isVoidDeath = false) {
+    let dropX = this.avatar ? this.avatar.position.x : 0;
+    let dropZ = this.avatar ? this.avatar.position.z : 0;
+    let dropY = (this.island && this.avatar) ? this.island.getTerrainHeight(dropX, dropZ) : 1.0;
+
+    // If death happened in the void (y < -10.0 or terrainY < -1.0), drop items safely on island surface!
+    if (isVoidDeath || dropY < -1.0 || (this.avatar && this.avatar.position.y < -1.0)) {
+      dropX = 0;
+      dropZ = 0;
+      dropY = this.island ? Math.max(0.5, this.island.getTerrainHeight(0, 0)) : 1.0;
+    }
+
+    if (this.inventory && this.itemDropManager) {
+      this.inventory.dropAllItems(dropX, dropZ, dropY, this.itemDropManager, this.networkManager);
     }
   }
 
@@ -547,12 +571,19 @@ class GameApp {
 
       // 7. Death Check UI Trigger
       if (this.avatar.isDead) {
+        if (!this.wasDeadLastFrame) {
+          this.wasDeadLastFrame = true;
+          const isVoidDeath = (this.avatar.position.y < -10.0);
+          this.handlePlayerDeath(isVoidDeath);
+        }
         if (this.deathOverlay.classList.contains('hidden')) {
           this.deathOverlay.classList.remove('hidden');
           if (document.exitPointerLock) {
             document.exitPointerLock();
           }
         }
+      } else {
+        this.wasDeadLastFrame = false;
       }
 
       // 8. Controls & Camera Update (with terrain clipping prevention)

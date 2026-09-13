@@ -279,7 +279,7 @@ wss.on('connection', ws => {
       case 'blockBroken': {
         // Remove block from placedBlocks by position and type
         const idx = worldState.placedBlocks.findIndex(b =>
-          Math.abs(b.x - data.x) < 0.5 && Math.abs(b.z - data.z) < 0.5 && b.blockType === data.blockType
+          Math.hypot(b.x - data.x, b.z - data.z) < 1.0 && (!data.blockType || b.blockType === data.blockType)
         );
         if (idx !== -1) {
           worldState.placedBlocks.splice(idx, 1);
