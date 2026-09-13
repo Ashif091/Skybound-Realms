@@ -1,0 +1,14 @@
+# Persistent server data (generated at runtime on server)
+data/
+
+# Dependencies
+node_modules/
+
+# Local environment configuration
+.env
+
+# Production build output
+dist/
+
+# Logs
+*.log
