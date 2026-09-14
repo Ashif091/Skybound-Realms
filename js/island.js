@@ -803,10 +803,33 @@ export class SkyIsland {
     rightMesh.receiveShadow = true;
     wallGroup.add(rightMesh);
 
-    // 5. Window Frame Accent Border
-    const windowFrame = new THREE.Mesh(new THREE.BoxGeometry(1.04, 1.04, 0.22), frameMat);
-    windowFrame.position.set(0, 0, 0);
-    wallGroup.add(windowFrame);
+    // 5. Window Frame Accent Border (Hollow border framing the 1.0m x 1.0m cutout)
+    const windowFrameGroup = new THREE.Group();
+    const topFrame = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.05, 0.22), frameMat);
+    topFrame.position.set(0, 0.50, 0);
+    topFrame.castShadow = true;
+    topFrame.receiveShadow = true;
+    windowFrameGroup.add(topFrame);
+
+    const botFrame = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.06, 0.24), frameMat);
+    botFrame.position.set(0, -0.50, 0);
+    botFrame.castShadow = true;
+    botFrame.receiveShadow = true;
+    windowFrameGroup.add(botFrame);
+
+    const leftFrame = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.98, 0.22), frameMat);
+    leftFrame.position.set(-0.50, 0, 0);
+    leftFrame.castShadow = true;
+    leftFrame.receiveShadow = true;
+    windowFrameGroup.add(leftFrame);
+
+    const rightFrame = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.98, 0.22), frameMat);
+    rightFrame.position.set(0.50, 0, 0);
+    rightFrame.castShadow = true;
+    rightFrame.receiveShadow = true;
+    windowFrameGroup.add(rightFrame);
+
+    wallGroup.add(windowFrameGroup);
 
     // 6. Interactive Left & Right Window Shutters (Openable / Closeable on right-click)
     const leftShutter = new THREE.Group();
