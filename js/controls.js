@@ -232,11 +232,13 @@ export class GameControls {
     const sprintSpeed = 6.8;
     const currentSpeed = this.keys.sprint ? sprintSpeed : walkSpeed;
 
+    // Minecraft Mouse Look: Avatar body ALWAYS faces camera look direction
+    this.avatar.targetRotation = this.cameraYaw;
+
     if (moveForward !== 0 || moveRight !== 0) {
       const inputAngle = Math.atan2(moveRight, moveForward);
       const moveAngle = this.cameraYaw + inputAngle;
       
-      this.avatar.targetRotation = moveAngle;
       this.avatar.velocity.x = Math.sin(moveAngle) * currentSpeed;
       this.avatar.velocity.z = Math.cos(moveAngle) * currentSpeed;
     } else {

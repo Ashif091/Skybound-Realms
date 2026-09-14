@@ -313,7 +313,7 @@ export class Avatar {
     let rotDiff = this.targetRotation - this.rotation;
     while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
     while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
-    this.rotation += rotDiff * Math.min(1.0, 14 * deltaTime);
+    this.rotation += rotDiff * Math.min(1.0, 25 * deltaTime);
     this.group.rotation.y = this.rotation;
 
     // Apply Velocity
