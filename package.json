@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "mongodb": "^7.6.0",
     "three": "^0.174.0",
     "ws": "^8.21.3"
   },
