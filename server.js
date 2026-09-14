@@ -146,7 +146,12 @@ async function connectMongo() {
         worldState.trees.set(key, t);
       });
       (worldDoc.drops || []).forEach(d => worldState.drops.set(d.dropId, d));
-      worldState.placedBlocks = worldDoc.placedBlocks || [];
+      const cleanedBlocks = [];
+      (worldDoc.placedBlocks || []).forEach(b => {
+        const dup = cleanedBlocks.some(existing => Math.hypot(existing.x - b.x, existing.z - b.z) < 0.4 && existing.blockType === b.blockType);
+        if (!dup) cleanedBlocks.push(b);
+      });
+      worldState.placedBlocks = cleanedBlocks;
       console.log(`[MONGO] Loaded world: ${worldState.trees.size} trees, ${worldState.drops.size} drops, ${worldState.placedBlocks.length} placed block(s).`);
     } else {
       console.log('[MONGO] No existing world document — starting fresh.');
@@ -344,20 +349,81 @@ async function startServer() {
         }
 
         case 'blockPlaced': {
-          const block = { x: data.x, z: data.z, rot: data.rot || 0, blockType: data.blockType || 'crafting_bench' };
-          worldState.placedBlocks.push(block);
-          scheduleSaveWorld();
+          const dupIdx = worldState.placedBlocks.findIndex(b =>
+            Math.hypot(b.x - data.x, b.z - data.z) < 0.4 && b.blockType === (data.blockType || 'crafting_bench')
+          );
+          const existingStorage = (dupIdx !== -1) ? worldState.placedBlocks[dupIdx].storage : null;
+          const block = {
+            x: data.x,
+            z: data.z,
+            rot: data.rot || 0,
+            blockType: data.blockType || 'crafting_bench',
+            storage: data.storage || existingStorage || (data.blockType === 'wood_box' ? Array(6).fill(null) : null)
+          };
+          if (dupIdx !== -1) {
+            worldState.placedBlocks[dupIdx] = block;
+          } else {
+            worldState.placedBlocks.push(block);
+          }
+          await saveWorldToDB();
           broadcast({ type: 'blockPlacedSync', ...block }, playerId);
           break;
         }
 
-        case 'blockBroken': {
-          const idx = worldState.placedBlocks.findIndex(b =>
-            Math.hypot(b.x - data.x, b.z - data.z) < 1.0 && (!data.blockType || b.blockType === data.blockType)
+        case 'boxStorageUpdate': {
+          let block = worldState.placedBlocks.find(b =>
+            b.blockType === 'wood_box' && Math.hypot(b.x - data.x, b.z - data.z) < 1.0
           );
-          if (idx !== -1) {
-            worldState.placedBlocks.splice(idx, 1);
-            scheduleSaveWorld();
+          if (!block) {
+            let minDist = 1.85;
+            worldState.placedBlocks.forEach(b => {
+              if (b.blockType === 'wood_box') {
+                const dist = Math.hypot(b.x - data.x, b.z - data.z);
+                if (dist < minDist) {
+                  minDist = dist;
+                  block = b;
+                }
+              }
+            });
+          }
+          if (block) {
+            block.storage = data.storage;
+            await saveWorldToDB();
+          } else {
+            console.warn(`[SERVER] boxStorageUpdate: No box found near x=${data.x}, z=${data.z}`);
+          }
+          broadcast({ type: 'boxStorageSync', x: data.x, z: data.z, storage: data.storage }, playerId);
+          break;
+        }
+
+        case 'blockBroken': {
+          const targetType = data.blockType;
+          let removedCount = 0;
+          for (let i = worldState.placedBlocks.length - 1; i >= 0; i--) {
+            const b = worldState.placedBlocks[i];
+            const dist = Math.hypot(b.x - data.x, b.z - data.z);
+            if (dist < 1.85 && (!targetType || targetType === 'log' || b.blockType === targetType)) {
+              worldState.placedBlocks.splice(i, 1);
+              removedCount++;
+            }
+          }
+          if (removedCount === 0) {
+            let minDist = 2.5;
+            let closestIdx = -1;
+            worldState.placedBlocks.forEach((b, i) => {
+              const dist = Math.hypot(b.x - data.x, b.z - data.z);
+              if (dist < minDist) {
+                minDist = dist;
+                closestIdx = i;
+              }
+            });
+            if (closestIdx !== -1) {
+              worldState.placedBlocks.splice(closestIdx, 1);
+              removedCount++;
+            }
+          }
+          if (removedCount > 0) {
+            await saveWorldToDB();
           }
           broadcast({ type: 'blockBrokenSync', x: data.x, z: data.z, blockType: data.blockType }, playerId);
           break;
@@ -396,6 +462,7 @@ async function startServer() {
         console.log(`[LEAVE] ${entry.data.name} (${playerId})`);
         players.delete(playerId);
         broadcast({ type: 'playerLeft', id: playerId });
+        await saveWorldToDB();
       }
     });
 

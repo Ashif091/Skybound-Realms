@@ -15,6 +15,11 @@ export class GameControls {
     this.isLocked = false;
     this.isFirstPerson = false; // Toggle via Key V (First-Person Eye View vs Third-Person)
 
+    // 3rd Person Viewpoint Notification Tracking (1 min initial, 6 mins repeat)
+    this.thirdPersonTimer = 0;
+    this.nextNotificationTarget = 60; // 60s (1 min) initial threshold
+    this.viewNotificationTimer = null;
+
     // Minecraft Mouse Look Angles
     this.cameraYaw = 0;
     this.cameraPitch = 0.25;
@@ -140,6 +145,10 @@ export class GameControls {
       // Key V: Toggle Viewpoint Mode (First-Person Eye View vs Third-Person View)
       if (e.code === 'KeyV') {
         this.isFirstPerson = !this.isFirstPerson;
+        this.thirdPersonTimer = 0;
+        this.nextNotificationTarget = 60;
+        this.hideViewpointNotification();
+
         if (this.isFirstPerson) {
           this.cameraPitch = 0; // Reset pitch to level eye height
         } else {
@@ -297,6 +306,56 @@ export class GameControls {
       // Smooth camera lerp
       this.camera.position.lerp(targetCamPos, Math.min(1.0, 16 * deltaTime));
       this.camera.lookAt(avatarPos);
+    }
+
+    // ── 3rd Person Viewpoint Hint Notification Tracking ──────────────────────
+    if (!this.isFirstPerson && this.isLocked) {
+      this.thirdPersonTimer += deltaTime;
+      if (this.thirdPersonTimer >= this.nextNotificationTarget) {
+        this.showViewpointNotification();
+        this.nextNotificationTarget += 360; // Repeat after 6 minutes (360 seconds)
+      }
+    } else if (this.isFirstPerson) {
+      if (this.thirdPersonTimer > 0) {
+        this.thirdPersonTimer = 0;
+        this.nextNotificationTarget = 60;
+        this.hideViewpointNotification();
+      }
+    }
+  }
+
+  showViewpointNotification() {
+    let el = document.getElementById('viewpoint-hint-banner');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'viewpoint-hint-banner';
+      el.className = 'viewpoint-hint-banner';
+      el.innerHTML = `
+        <div class="viewpoint-hint-content">
+          <span class="viewpoint-icon">👁️</span>
+          <span>Press <kbd>V</kbd> to switch to 1st Person View</span>
+        </div>
+      `;
+      document.body.appendChild(el);
+    }
+
+    el.classList.add('show');
+
+    // Auto-hide after 4 seconds
+    if (this.viewNotificationTimer) clearTimeout(this.viewNotificationTimer);
+    this.viewNotificationTimer = setTimeout(() => {
+      this.hideViewpointNotification();
+    }, 4000);
+  }
+
+  hideViewpointNotification() {
+    const el = document.getElementById('viewpoint-hint-banner');
+    if (el) {
+      el.classList.remove('show');
+    }
+    if (this.viewNotificationTimer) {
+      clearTimeout(this.viewNotificationTimer);
+      this.viewNotificationTimer = null;
     }
   }
 }

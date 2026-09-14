@@ -252,58 +252,47 @@ export class SkyIsland {
     const foliageMat1 = new THREE.MeshStandardMaterial({ color: 0x4ade80, flatShading: true });
     const foliageMat2 = new THREE.MeshStandardMaterial({ color: 0x22c55e, flatShading: true });
 
-    // Interactive Breakable Trees
-    const treePositions = [
+    // Generate 25 Interactive Breakable Trees on Ground
+    const baseTreePositions = [
       [-15, 8], [-20, -10], [-25, 5], [-8, 14], [-26, -2],
-      [-18, 15], [-22, -14], [0, 16], [12, -8],
-      [18, 10], [22, -4], [25, 8], [15, 15], [24, -10]
+      [-18, 15], [-22, -14], [0, 16], [12, -8], [-12, -16],
+      [18, 10], [22, -4], [25, 8], [15, 15], [24, -10],
+      [8, -18], [-5, -18], [5, 18], [-15, -18], [18, -18],
+      [26, 2], [-28, 2], [20, -16], [-22, 12], [28, -6]
     ];
 
-    treePositions.forEach(([x, z], index) => {
+    let count = 0;
+    baseTreePositions.forEach(([x, z], index) => {
       const distFromCenter = Math.hypot(x / this.radiusX, z / this.radiusZ);
       const distPond = Math.hypot(x - this.pondX, z - this.pondZ);
-      if (distFromCenter > 0.80 || distPond < 8.0) return;
+      if (distFromCenter > 0.82 || distPond < 7.5) return;
 
       const y = this.getTerrainHeight(x, z);
-      if (y < 0) return;
+      if (y < 0.2) return;
 
-      const collider = { id: index, x, z, radius: 0.75 };
-      this.treeColliders.push(collider);
-
-      const treeGroup = new THREE.Group();
-      treeGroup.position.set(x, y, z);
-
-      const trunkGeo = new THREE.CylinderGeometry(0.3, 0.45, 2.2, 5);
-      const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-      trunk.position.y = 1.1;
-      treeGroup.add(trunk);
-
-      const mat = (x + z) % 2 === 0 ? foliageMat1 : foliageMat2;
-      const layer1 = new THREE.Mesh(new THREE.ConeGeometry(1.8, 2.5, 5), mat);
-      layer1.position.y = 2.8;
-      
-      const layer2 = new THREE.Mesh(new THREE.ConeGeometry(1.4, 2.2, 5), mat);
-      layer2.position.y = 4.0;
-
-      treeGroup.add(layer1);
-      treeGroup.add(layer2);
-
-      const scale = 0.8 + Math.random() * 0.4;
-      treeGroup.scale.set(scale, scale, scale);
-      this.group.add(treeGroup);
-
-      this.trees.push({
-        id: index,
-        group: treeGroup,
-        collider: collider,
-        x: x,
-        z: z,
-        y: y,
-        health: 40,    // 40 HP per tree
-        maxHealth: 40,
-        shakeTimer: 0
-      });
+      this.spawnSingleTree(x, z, y, index, trunkMat, foliageMat1, foliageMat2);
+      count++;
     });
+
+    // Fill up to 25 trees if any base positions were skipped due to pond/boundary
+    let attempts = 0;
+    while (this.trees.length < 25 && attempts < 150) {
+      attempts++;
+      const rx = (Math.random() - 0.5) * 54;
+      const rz = (Math.random() - 0.5) * 40;
+
+      const distFromCenter = Math.hypot(rx / this.radiusX, rz / this.radiusZ);
+      const distPond = Math.hypot(rx - this.pondX, rz - this.pondZ);
+      if (distFromCenter > 0.80 || distPond < 7.5) continue;
+
+      const ry = this.getTerrainHeight(rx, rz);
+      if (ry < 0.2) continue;
+
+      const tooClose = this.trees.some(t => Math.hypot(rx - t.x, rz - t.z) < 3.2);
+      if (tooClose) continue;
+
+      this.spawnSingleTree(rx, rz, ry, Date.now() + attempts, trunkMat, foliageMat1, foliageMat2);
+    }
 
     // Rocks
     const rockMat = new THREE.MeshStandardMaterial({ color: 0x64748b, flatShading: true, roughness: 0.8 });
@@ -335,6 +324,45 @@ export class SkyIsland {
       sMesh.position.set(rx, ry + 0.25, rz);
       this.group.add(sMesh);
       this.treeColliders.push({ x: rx, z: rz, radius: 0.45 });
+    });
+  }
+
+  spawnSingleTree(x, z, y, treeId, trunkMat, foliageMat1, foliageMat2) {
+    const collider = { id: treeId, x, z, radius: 0.75 };
+    this.treeColliders.push(collider);
+
+    const treeGroup = new THREE.Group();
+    treeGroup.position.set(x, y, z);
+
+    const trunkGeo = new THREE.CylinderGeometry(0.3, 0.45, 2.2, 5);
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    trunk.position.y = 1.1;
+    treeGroup.add(trunk);
+
+    const mat = Math.abs(Math.floor(x + z)) % 2 === 0 ? foliageMat1 : foliageMat2;
+    const layer1 = new THREE.Mesh(new THREE.ConeGeometry(1.8, 2.5, 5), mat);
+    layer1.position.y = 2.8;
+    
+    const layer2 = new THREE.Mesh(new THREE.ConeGeometry(1.4, 2.2, 5), mat);
+    layer2.position.y = 4.0;
+
+    treeGroup.add(layer1);
+    treeGroup.add(layer2);
+
+    const scale = 0.8 + Math.random() * 0.4;
+    treeGroup.scale.set(scale, scale, scale);
+    this.group.add(treeGroup);
+
+    this.trees.push({
+      id: treeId,
+      group: treeGroup,
+      collider: collider,
+      x: x,
+      z: z,
+      y: y,
+      health: 40,    // 40 HP per tree
+      maxHealth: 40,
+      shakeTimer: 0
     });
   }
 
@@ -472,9 +500,9 @@ export class SkyIsland {
   }
 
   /**
-   * Respawns broken trees randomly across valid island land when a new day starts
+   * Respawns broken trees randomly across valid island land when a new day starts (brings total trees to 25)
    */
-  respawnTrees(targetCount = 12) {
+  respawnTrees(targetCount = 25) {
     const missingCount = targetCount - this.trees.length;
     if (missingCount <= 0) return;
 
@@ -485,59 +513,24 @@ export class SkyIsland {
     let spawned = 0;
     let attempts = 0;
 
-    while (spawned < missingCount && attempts < 100) {
+    while (spawned < missingCount && attempts < 200) {
       attempts++;
-      const rx = (Math.random() - 0.5) * 50;
-      const rz = (Math.random() - 0.5) * 36;
+      const rx = (Math.random() - 0.5) * 54;
+      const rz = (Math.random() - 0.5) * 40;
 
       const distFromCenter = Math.hypot(rx / this.radiusX, rz / this.radiusZ);
       const distPond = Math.hypot(rx - this.pondX, rz - this.pondZ);
-      if (distFromCenter > 0.78 || distPond < 8.0) continue;
+      if (distFromCenter > 0.78 || distPond < 7.5) continue;
 
       const ry = this.getTerrainHeight(rx, rz);
       if (ry < 0.2) continue;
 
-      // Check distance from existing trees
-      const tooClose = this.trees.some(t => Math.hypot(rx - t.x, rz - t.z) < 4.0);
+      // Check distance from existing trees to prevent overlap
+      const tooClose = this.trees.some(t => Math.hypot(rx - t.x, rz - t.z) < 3.2);
       if (tooClose) continue;
 
-      const collider = { id: Date.now() + spawned, x: rx, z: rz, radius: 0.75 };
-      this.treeColliders.push(collider);
-
-      const treeGroup = new THREE.Group();
-      treeGroup.position.set(rx, ry, rz);
-
-      const trunkGeo = new THREE.CylinderGeometry(0.3, 0.45, 2.2, 5);
-      const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-      trunk.position.y = 1.1;
-      treeGroup.add(trunk);
-
-      const mat = spawned % 2 === 0 ? foliageMat1 : foliageMat2;
-      const layer1 = new THREE.Mesh(new THREE.ConeGeometry(1.8, 2.5, 5), mat);
-      layer1.position.y = 2.8;
-      
-      const layer2 = new THREE.Mesh(new THREE.ConeGeometry(1.4, 2.2, 5), mat);
-      layer2.position.y = 4.0;
-
-      treeGroup.add(layer1);
-      treeGroup.add(layer2);
-
-      const scale = 0.8 + Math.random() * 0.4;
-      treeGroup.scale.set(scale, scale, scale);
-      this.group.add(treeGroup);
-
-      this.trees.push({
-        id: collider.id,
-        group: treeGroup,
-        collider: collider,
-        x: rx,
-        z: rz,
-        y: ry,
-        health: 40,
-        maxHealth: 40,
-        shakeTimer: 0
-      });
-
+      const treeId = Date.now() + spawned;
+      this.spawnSingleTree(rx, rz, ry, treeId, trunkMat, foliageMat1, foliageMat2);
       spawned++;
     }
   }
@@ -546,13 +539,14 @@ export class SkyIsland {
    * Places a 3D Low-Poly Rectangular 4-Legged Wooden Crafting Table on the ground at (x, z)
    * Width = 1.6m (larger rectangular tabletop), Height = 0.9m (1/2 player height), 15 HP, Blueprint Paper on Top.
    */
-  placeCraftingBench(x, z) {
+  placeCraftingBench(x, z, rotationAngle = 0) {
     const y = this.getTerrainHeight(x, z);
     if (y < -1.0) return false;
 
     const tableId = `bench_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`;
     const benchGroup = new THREE.Group();
     benchGroup.position.set(x, y, z); // Ground level origin
+    benchGroup.rotation.y = rotationAngle;
 
     const legMat = new THREE.MeshStandardMaterial({ color: 0x4a2e18, flatShading: true, roughness: 0.8 });
     const topMat = new THREE.MeshStandardMaterial({ color: 0xd2a679, flatShading: true, roughness: 0.6 });
@@ -614,13 +608,16 @@ export class SkyIsland {
       x: x,
       z: z,
       y: y,
+      type: 'crafting_bench',
+      rotationAngle: rotationAngle,
       health: 15,
       maxHealth: 15,
       shakeTimer: 0
     };
 
     this.placedCraftingTables.push(tableObj);
-    this.placedBlocks.push({ mesh: benchGroup, collider, x, z, y, blockType: 'crafting_bench' });
+    benchGroup.userData.structureRef = tableObj;
+    this.placedBlocks.push({ mesh: benchGroup, collider, x, z, y, blockType: 'crafting_bench', rotationAngle });
 
     return true;
   }
@@ -686,6 +683,12 @@ export class SkyIsland {
 
     if (struct.health <= 0) {
       this.group.remove(struct.mesh);
+      if (struct.colliders && Array.isArray(struct.colliders)) {
+        struct.colliders.forEach(c => {
+          const cIndex = this.treeColliders.indexOf(c);
+          if (cIndex !== -1) this.treeColliders.splice(cIndex, 1);
+        });
+      }
       if (struct.collider) {
         const cIndex = this.treeColliders.indexOf(struct.collider);
         if (cIndex !== -1) this.treeColliders.splice(cIndex, 1);
@@ -701,13 +704,13 @@ export class SkyIsland {
             }
           });
         }
-        return { broken: true, x: struct.x, z: struct.z, y: struct.y, itemsToDrop, itemType: 'wood_box' };
+        return { broken: true, x: struct.x, z: struct.z, y: struct.y, itemsToDrop, itemType: 'wood_box', structType: 'wood_box' };
       }
 
-      return { broken: true, x: struct.x, z: struct.z, y: struct.y, itemType: 'log' };
+      return { broken: true, x: struct.x, z: struct.z, y: struct.y, itemType: 'log', structType: struct.type };
     }
 
-    return { broken: false, x: struct.x, z: struct.z, y: struct.y, health: struct.health, maxHealth: 15, itemType: struct.type || 'log' };
+    return { broken: false, x: struct.x, z: struct.z, y: struct.y, health: struct.health, maxHealth: 15, itemType: struct.type || 'log', structType: struct.type };
   }
 
   /**
@@ -756,6 +759,7 @@ export class SkyIsland {
     colliders.forEach(c => this.treeColliders.push(c));
 
     this.placedStructures.push({ mesh: wallGroup, colliders, x, z, y, type: 'wood_wall', rotationAngle, health: 15, shakeTimer: 0 });
+    wallGroup.userData.structureRef = this.placedStructures[this.placedStructures.length - 1];
 
     return true;
   }
@@ -876,6 +880,7 @@ export class SkyIsland {
       health: 15,
       shakeTimer: 0
     });
+    wallGroup.userData.structureRef = this.placedStructures[this.placedStructures.length - 1];
 
     return true;
   }
@@ -979,6 +984,7 @@ export class SkyIsland {
       health: 15,
       shakeTimer: 0
     });
+    wallGroup.userData.structureRef = this.placedStructures[this.placedStructures.length - 1];
 
     return true;
   }
@@ -1113,6 +1119,7 @@ export class SkyIsland {
     this.group.add(floorGroup);
 
     this.placedStructures.push({ mesh: floorGroup, x, z, y, type: 'wood_floor', rotationAngle, health: 15, shakeTimer: 0 });
+    floorGroup.userData.structureRef = this.placedStructures[this.placedStructures.length - 1];
     return true;
   }
 
@@ -1136,6 +1143,7 @@ export class SkyIsland {
     this.group.add(roofGroup);
 
     this.placedStructures.push({ mesh: roofGroup, x, z, y, type: 'wood_roof', rotationAngle, health: 15, shakeTimer: 0 });
+    roofGroup.userData.structureRef = this.placedStructures[this.placedStructures.length - 1];
     return true;
   }
 
@@ -1144,7 +1152,7 @@ export class SkyIsland {
    * Features a vaulted arched lid, dual gold/metal bands with rivets, corner braces, front latch buckle, and back hinges
    * matching the reference image from all viewing angles.
    */
-  placeWoodBox(x, z, rotationAngle = 0) {
+  placeWoodBox(x, z, rotationAngle = 0, initialStorage = null) {
     const y = this.getTerrainHeight(x, z);
     if (y < -1.0) return false;
 
@@ -1314,8 +1322,11 @@ export class SkyIsland {
       rotationAngle: rotationAngle,
       health: 15,
       shakeTimer: 0,
-      storage: Array.from({ length: 6 }, () => null)
+      storage: (initialStorage && Array.isArray(initialStorage) && initialStorage.length === 6)
+        ? JSON.parse(JSON.stringify(initialStorage))
+        : Array.from({ length: 6 }, () => null)
     });
+    boxGroup.userData.structureRef = this.placedStructures[this.placedStructures.length - 1];
 
     return true;
   }
@@ -1350,14 +1361,19 @@ export class SkyIsland {
       const rot = b.rotationAngle || b.rot || 0;
       const type = b.blockType || 'crafting_bench';
 
-      // Deduplicate: Skip if block already exists at position
-      const exists = this.placedStructures.some(s => Math.hypot(s.x - b.x, s.z - b.z) < 0.4 && s.type === type) ||
-                     this.placedCraftingTables.some(t => Math.hypot(t.x - b.x, t.z - b.z) < 0.4 && type === 'crafting_bench') ||
-                     this.placedBlocks.some(pb => Math.hypot(pb.x - b.x, pb.z - b.z) < 0.4);
-      if (exists) return;
+      // Deduplicate: Skip if block already exists at position, but sync box storage if needed
+      const existing = this.placedStructures.find(s => Math.hypot(s.x - b.x, s.z - b.z) < 0.4 && s.type === type);
+      if (existing) {
+        if (type === 'wood_box' && b.storage && Array.isArray(b.storage)) {
+          existing.storage = JSON.parse(JSON.stringify(b.storage));
+        }
+        return;
+      }
+      if (this.placedCraftingTables.some(t => Math.hypot(t.x - b.x, t.z - b.z) < 0.4 && type === 'crafting_bench')) return;
+      if (this.placedBlocks.some(pb => Math.hypot(pb.x - b.x, pb.z - b.z) < 0.4)) return;
 
       if (type === 'crafting_bench') {
-        this.placeCraftingBench(b.x, b.z);
+        this.placeCraftingBench(b.x, b.z, rot);
       } else if (type === 'wood_wall') {
         this.placeWoodWall(b.x, b.z, rot);
       } else if (type === 'wood_wall_window') {
@@ -1369,7 +1385,7 @@ export class SkyIsland {
       } else if (type === 'wood_roof') {
         this.placeWoodRoof(b.x, b.z, rot);
       } else if (type === 'wood_box') {
-        this.placeWoodBox(b.x, b.z, rot);
+        this.placeWoodBox(b.x, b.z, rot, b.storage);
       } else {
         this.placeWoodBlock(b.x, b.z);
       }
@@ -1382,7 +1398,7 @@ export class SkyIsland {
   removeBlockAt(x, z, blockType) {
     // 1. Check in placedCraftingTables
     if (blockType === 'crafting_bench' || !blockType) {
-      const idx = this.placedCraftingTables.findIndex(t => Math.hypot(t.x - x, t.z - z) < 0.8);
+      const idx = this.placedCraftingTables.findIndex(t => Math.hypot(t.x - x, t.z - z) < 1.85);
       if (idx !== -1) {
         const table = this.placedCraftingTables[idx];
         this.group.remove(table.group);
@@ -1394,10 +1410,19 @@ export class SkyIsland {
     }
 
     // 2. Check in placedStructures
-    const sIdx = this.placedStructures.findIndex(s => Math.hypot(s.x - x, s.z - z) < 0.8 && (!blockType || s.type === blockType));
+    const sIdx = this.placedStructures.findIndex(s =>
+      Math.hypot(s.x - x, s.z - z) < 1.85 &&
+      (!blockType || blockType === 'log' || s.type === blockType)
+    );
     if (sIdx !== -1) {
       const struct = this.placedStructures[sIdx];
       this.group.remove(struct.mesh);
+      if (struct.colliders && Array.isArray(struct.colliders)) {
+        struct.colliders.forEach(c => {
+          const cIdx = this.treeColliders.indexOf(c);
+          if (cIdx !== -1) this.treeColliders.splice(cIdx, 1);
+        });
+      }
       if (struct.collider) {
         const cIdx = this.treeColliders.indexOf(struct.collider);
         if (cIdx !== -1) this.treeColliders.splice(cIdx, 1);
@@ -1407,7 +1432,7 @@ export class SkyIsland {
     }
 
     // 3. Check in placedBlocks
-    const bIdx = this.placedBlocks.findIndex(b => Math.hypot(b.x - x, b.z - z) < 0.8);
+    const bIdx = this.placedBlocks.findIndex(b => Math.hypot(b.x - x, b.z - z) < 1.85);
     if (bIdx !== -1) {
       const block = this.placedBlocks[bIdx];
       this.group.remove(block.mesh);

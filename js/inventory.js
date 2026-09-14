@@ -685,7 +685,22 @@ export class InventorySystem {
     if (document.exitPointerLock) document.exitPointerLock();
   }
 
+  notifyStorageChange() {
+    if (this.activeStorageBox && this.gameApp && this.gameApp.networkManager) {
+      this.gameApp.networkManager.sendBoxStorageUpdate(
+        this.activeStorageBox.x,
+        this.activeStorageBox.z,
+        this.activeStorageBox.storage
+      );
+      this.gameApp.networkManager.sendSaveInventory(
+        this.getSlots(),
+        this.gameApp.playerHp || 100
+      );
+    }
+  }
+
   closeStorageBoxModal() {
+    this.notifyStorageChange();
     this.isStorageOpen = false;
     this.activeStorageBox = null;
     if (this.storageOverlayEl) {
@@ -775,6 +790,7 @@ export class InventorySystem {
           this.showToast(`Stored ${pItem.name} in Box!`);
           this.updateUI();
           this.renderStorageBoxUI();
+          this.notifyStorageChange();
           return;
         }
       }
@@ -794,6 +810,7 @@ export class InventorySystem {
           this.showToast(`Stored ${pItem.name} in Box!`);
           this.updateUI();
           this.renderStorageBoxUI();
+          this.notifyStorageChange();
           return;
         }
       }
@@ -809,6 +826,7 @@ export class InventorySystem {
 
     this.updateUI();
     this.renderStorageBoxUI();
+    this.notifyStorageChange();
   }
 
   transferFromBoxToPlayer(boxSlotIndex) {
@@ -826,6 +844,7 @@ export class InventorySystem {
 
     this.updateUI();
     this.renderStorageBoxUI();
+    this.notifyStorageChange();
   }
 
   setAvatarName(name) {

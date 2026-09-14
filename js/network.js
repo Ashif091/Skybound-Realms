@@ -170,10 +170,24 @@ export class NetworkManager {
         break;
       }
 
+      case 'boxStorageSync': {
+        if (this.gameApp && this.gameApp.island) {
+          const box = this.gameApp.island.getNearWoodBox(msg.x, msg.z);
+          if (box) {
+            box.storage = msg.storage;
+            if (this.gameApp.inventory && this.gameApp.inventory.isStorageOpen && this.gameApp.inventory.activeStorageBox === box) {
+              this.gameApp.inventory.renderStorageBoxUI();
+            }
+          }
+        }
+        break;
+      }
+
       case 'pickupSuccess': {
         if (this.gameApp.inventory && this.gameApp.itemDropManager) {
           this.gameApp.inventory.addItem(msg.itemType || 'log', msg.count);
           this.gameApp.itemDropManager.removeDrop(msg.dropId);
+          this.sendSaveInventory(this.gameApp.inventory.getSlots(), this.gameApp.playerHp || 100);
         }
         break;
       }
@@ -184,7 +198,7 @@ export class NetworkManager {
       }
 
       case 'treesRespawnedSync': {
-        if (this.gameApp.island) this.gameApp.island.respawnTrees(12);
+        if (this.gameApp.island) this.gameApp.island.respawnTrees(25);
         break;
       }
 
@@ -249,6 +263,15 @@ export class NetworkManager {
 
   sendSaveInventory(slots, playerHp) {
     this.send({ type: 'saveInventory', slots, playerHp });
+  }
+
+  sendBoxStorageUpdate(x, z, storage) {
+    this.send({
+      type: 'boxStorageUpdate',
+      x: Math.round(x * 100) / 100,
+      z: Math.round(z * 100) / 100,
+      storage
+    });
   }
 
   // ── Update loop ───────────────────────────────────────────────────────────

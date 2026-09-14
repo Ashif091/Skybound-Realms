@@ -40,12 +40,16 @@ class GameApp {
     // 12-Minute Day & Night Cycle System
     this.dayNight = new DayNightCycle(this.scene);
     this.dayNight.onNewDayCallback = () => {
-      if (this.island) this.island.respawnTrees(12);
+      if (this.island) this.island.respawnTrees(25);
+      if (this.inventory && this.inventory.showToast) {
+        this.inventory.showToast('🌅 Morning arrived! Cut-down trees have regrown randomly.');
+      }
       if (this.networkManager) this.networkManager.send({ type: 'respawnTrees' });
     };
 
     // Inventory & Item Drops System
     this.inventory = new InventorySystem();
+    this.inventory.gameApp = this;
     this.playerHp = 100;
     this.hpRegenTimer = 0;
     this.inventory.updateHealth(this.playerHp, 100);
@@ -85,6 +89,10 @@ class GameApp {
 
     // Controls System (Will be instantiated upon joining world)
     this.controls = null;
+
+    // 3D Raycaster & Screen-Center Mouse NDC for Precision Crosshair Dot Targeting
+    this.raycaster = new THREE.Raycaster();
+    this.mouseNDC = new THREE.Vector2(0, 0);
 
     // Multiplayer Network Manager
     this.networkManager = new NetworkManager(this);
@@ -331,7 +339,7 @@ class GameApp {
           }
         }
         if (this.networkManager) {
-          this.networkManager.sendBlockBroken(structRes.x, structRes.z, structRes.type || structRes.itemType || 'wood_box');
+          this.networkManager.sendBlockBroken(structRes.x, structRes.z, structRes.structType || structRes.type || structRes.itemType || 'wood_box');
         }
       }
       return;
@@ -357,6 +365,36 @@ class GameApp {
   }
 
   /**
+   * Performs a 3D Raycast from center crosshair dot (camera view center).
+   * Returns { hit, structure } where:
+   *   hit      = THREE.Intersection (has .point, .distance, .object)
+   *   structure = matched placedStructure or placedCraftingTable entry (or null for terrain)
+   */
+  getCrosshairTarget(maxDistance = 6.0) {
+    if (!this.camera || !this.island || !this.island.group) return { hit: null, structure: null };
+    this.raycaster.setFromCamera(this.mouseNDC, this.camera);
+
+    const intersects = this.raycaster.intersectObject(this.island.group, true);
+    for (let i = 0; i < intersects.length; i++) {
+      const hit = intersects[i];
+      if (hit.distance > maxDistance) continue;
+
+      // Walk up the ancestor chain to find a mesh tagged with userData.structureRef
+      let obj = hit.object;
+      while (obj) {
+        if (obj.userData && obj.userData.structureRef) {
+          return { hit, structure: obj.userData.structureRef };
+        }
+        obj = obj.parent;
+      }
+
+      // No tagged structure ancestor — terrain or untagged mesh
+      return { hit, structure: null };
+    }
+    return { hit: null, structure: null };
+  }
+
+  /**
    * Called on Right Mouse Click -> Open Crafting Table UI or Place Structure / Drop Item
    */
   onPlaceRightClick() {
@@ -364,99 +402,114 @@ class GameApp {
 
     const avX = this.avatar.position.x;
     const avZ = this.avatar.position.z;
-    const avY = this.avatar.position.y;
     const avRot = this.avatar.rotation;
 
     const activeItem = this.inventory ? this.inventory.getActiveItem() : null;
     const placeableTypes = ['crafting_bench', 'wood_box', 'wood_wall', 'wood_wall_window', 'wood_wall_door', 'wood_floor', 'wood_roof'];
     const hasPlaceableItem = activeItem && activeItem.count > 0 && placeableTypes.includes(activeItem.type);
 
-    // 1. If near placed Wooden Storage Box (within 1.8m), open 6-Slot Storage Box UI Modal
-    const nearBox = this.island.getNearWoodBox(avX, avZ);
-    if (nearBox && !hasPlaceableItem) {
-      if (this.inventory) {
-        this.inventory.openStorageBoxModal(nearBox);
+    // --- If holding a buildable item (wireframe preview active): ONLY PLACE, skip all other interactions ---
+    if (hasPlaceableItem) {
+      const { hit } = this.getCrosshairTarget(6.0);
+      let dropX = avX + Math.sin(avRot) * 1.6;
+      let dropZ = avZ + Math.cos(avRot) * 1.6;
+      let groundY = this.island.getTerrainHeight(dropX, dropZ);
+      if (hit && hit.point) {
+        dropX = hit.point.x;
+        dropZ = hit.point.z;
+        groundY = this.island.getTerrainHeight(dropX, dropZ);
       }
-      return;
-    }
-
-    // 2. If near placed Crafting Table (within 1.5m), open Dedicated Crafting Window
-    const nearBench = this.island.getNearCraftingBench(avX, avZ);
-    if (nearBench && !hasPlaceableItem) {
-      if (this.inventory) {
-        this.inventory.openCraftingTableModal();
-      }
-      return;
-    }
-
-    // 3. If near placed Doorway Wall or Window Wall, open/close door or window shutters on right-click
-    const cameraPitch = this.controls ? this.controls.cameraPitch : 0.25;
-    const doorRes = this.island.toggleDoorOrWindowNear(avX, avZ, avY, avRot, cameraPitch, hasPlaceableItem);
-    if (doorRes) {
-      if (this.inventory) {
-        const actionName = doorRes.type === 'wood_wall_door' ? 'Door' : 'Window Shutter';
-        const stateName = doorRes.isOpen ? 'Opened' : 'Closed';
-        this.inventory.showToast(`${actionName} ${stateName}!`);
-      }
-      return;
-    }
-
-    // 4. Otherwise place active building structure / crafting table on ground
-    if (activeItem && activeItem.count > 0) {
-      const dropX = this.avatar.position.x + Math.sin(this.avatar.rotation) * 1.6;
-      const dropZ = this.avatar.position.z + Math.cos(this.avatar.rotation) * 1.6;
-      const groundY = this.island.getTerrainHeight(dropX, dropZ);
       const placementAngle = (this.avatar.rotation + this.buildRotationAngle) % (Math.PI * 2);
-
       if (activeItem.type === 'crafting_bench') {
         this.island.placeCraftingBench(dropX, dropZ, placementAngle);
-        if (this.networkManager) {
-          this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'crafting_bench');
-        }
+        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'crafting_bench');
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_box') {
         this.island.placeWoodBox(dropX, dropZ, placementAngle);
-        if (this.networkManager) {
-          this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_box');
-        }
+        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_box');
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_wall') {
         this.island.placeWoodWall(dropX, dropZ, placementAngle);
-        if (this.networkManager) {
-          this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall');
-        }
+        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall');
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_wall_window') {
         this.island.placeWoodWallWindow(dropX, dropZ, placementAngle);
-        if (this.networkManager) {
-          this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall_window');
-        }
+        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall_window');
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_wall_door') {
         this.island.placeWoodWallDoor(dropX, dropZ, placementAngle);
-        if (this.networkManager) {
-          this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall_door');
-        }
+        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall_door');
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_floor') {
         this.island.placeWoodFloor(dropX, dropZ, placementAngle);
-        if (this.networkManager) {
-          this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_floor');
-        }
+        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_floor');
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_roof') {
         this.island.placeWoodRoof(dropX, dropZ, placementAngle);
-        if (this.networkManager) {
-          this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_roof');
-        }
-        this.inventory.useActiveItem();
-      } else if (activeItem.type === 'log') {
-        const dropId = this.itemDropManager.spawnLogDrop(dropX, dropZ, groundY, 1, null, 'log');
-        if (this.networkManager) {
-          this.networkManager.sendDropLog(dropId, dropX, dropZ, groundY, 1, 'log');
-        }
+        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_roof');
         this.inventory.useActiveItem();
       }
+      if (this.networkManager && this.inventory) {
+        this.networkManager.sendSaveInventory(this.inventory.getSlots(), this.playerHp || 100);
+      }
+      return;
+    }
+
+    // --- Empty hand / non-build item: use crosshair raycast to identify targeted structure ---
+    const { hit, structure } = this.getCrosshairTarget(5.0);
+
+    // 1. If crosshair hits a Storage Box — open it
+    if (structure && structure.type === 'wood_box') {
+      if (this.inventory) this.inventory.openStorageBoxModal(structure);
+      return;
+    }
+
+    // 2. If crosshair hits a Crafting Bench — open crafting UI
+    if (structure && structure.type === 'crafting_bench') {
+      if (this.inventory) this.inventory.openCraftingTableModal();
+      return;
+    }
+
+    // 3. If crosshair hits a Door or Window Wall — toggle open/close
+    if (structure && (structure.type === 'wood_wall_door' || structure.type === 'wood_wall_window')) {
+      const wasOpen = structure.isOpen;
+      structure.isOpen = !structure.isOpen;
+      if (structure.type === 'wood_wall_door') {
+        structure.doorHinge.rotation.y = structure.isOpen ? Math.PI / 2 : 0;
+        if (structure.isOpen) {
+          if (structure.centerColliders) {
+            structure.centerColliders.forEach(c => {
+              const idx = this.island.treeColliders.indexOf(c);
+              if (idx !== -1) this.island.treeColliders.splice(idx, 1);
+            });
+          }
+        } else {
+          if (structure.centerColliders) {
+            structure.centerColliders.forEach(c => {
+              if (!this.island.treeColliders.includes(c)) this.island.treeColliders.push(c);
+            });
+          }
+        }
+      } else {
+        if (structure.leftShutter) structure.leftShutter.rotation.y = structure.isOpen ? -1.4 : 0;
+        if (structure.rightShutter) structure.rightShutter.rotation.y = structure.isOpen ? 1.4 : 0;
+      }
+      if (this.inventory) {
+        const actionName = structure.type === 'wood_wall_door' ? 'Door' : 'Window Shutter';
+        this.inventory.showToast(`${actionName} ${structure.isOpen ? 'Opened' : 'Closed'}!`);
+      }
+      return;
+    }
+
+    // 4. Drop a log item (non-build active item)
+    if (activeItem && activeItem.count > 0 && activeItem.type === 'log') {
+      let dropX = avX + Math.sin(avRot) * 1.6;
+      let dropZ = avZ + Math.cos(avRot) * 1.6;
+      const groundY = this.island.getTerrainHeight(dropX, dropZ);
+      if (hit && hit.point) { dropX = hit.point.x; dropZ = hit.point.z; }
+      const dropId = this.itemDropManager.spawnLogDrop(dropX, dropZ, groundY, 1, null, 'log');
+      if (this.networkManager) this.networkManager.sendDropLog(dropId, dropX, dropZ, groundY, 1, 'log');
+      this.inventory.useActiveItem();
     }
   }
 
@@ -600,15 +653,28 @@ class GameApp {
         this.controls.update(deltaTime, cameraTerrainY);
       }
 
-      // 9. Update Structure Placement White Wireframe Preview Mesh
+      // 9. Update Structure Placement White Wireframe Preview Mesh & Center Crosshair Dot UI
+      const crosshairEl = document.getElementById('crosshair-dot');
+      if (crosshairEl) {
+        const isPlaying = !this.avatar.isDead && (this.controls && this.controls.isLocked) && (!this.inventory || !this.inventory.isOpen);
+        crosshairEl.classList.toggle('hidden', !isPlaying);
+      }
+
       if (!this.avatar.isDead && this.inventory && !this.inventory.isOpen) {
         const activeItem = this.inventory.getActiveItem();
         const buildTypes = ['crafting_bench', 'wood_box', 'wood_wall', 'wood_wall_window', 'wood_wall_door', 'wood_floor', 'wood_roof'];
         if (activeItem && buildTypes.includes(activeItem.type)) {
           const rot = this.avatar.rotation;
-          const px = this.avatar.position.x + Math.sin(rot) * 1.6;
-          const pz = this.avatar.position.z + Math.cos(rot) * 1.6;
-          const gy = this.island.getTerrainHeight(px, pz);
+          let px = this.avatar.position.x + Math.sin(rot) * 1.6;
+          let pz = this.avatar.position.z + Math.cos(rot) * 1.6;
+          let gy = this.island.getTerrainHeight(px, pz);
+
+          const { hit } = this.getCrosshairTarget(6.0);
+          if (hit && hit.point) {
+            px = hit.point.x;
+            pz = hit.point.z;
+            gy = this.island.getTerrainHeight(px, pz);
+          }
 
           this.buildPreviewMesh.visible = true;
           this.buildPreviewMesh.rotation.y = (this.avatar.rotation + this.buildRotationAngle);
