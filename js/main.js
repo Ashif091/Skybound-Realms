@@ -411,14 +411,14 @@ class GameApp {
 
     // --- If holding a buildable item (wireframe preview active): ONLY PLACE, skip all other interactions ---
     if (hasPlaceableItem) {
-      const { hit } = this.getCrosshairTarget(6.0);
+      const { hit, structure } = this.getCrosshairTarget(6.0);
       let dropX = avX + Math.sin(avRot) * 1.6;
       let dropZ = avZ + Math.cos(avRot) * 1.6;
       let groundY = this.island.getTerrainHeight(dropX, dropZ);
       if (hit && hit.point) {
         dropX = hit.point.x;
         dropZ = hit.point.z;
-        groundY = this.island.getTerrainHeight(dropX, dropZ);
+        groundY = structure ? Math.max(this.island.getTerrainHeight(dropX, dropZ), hit.point.y) : this.island.getTerrainHeight(dropX, dropZ);
       }
       const placementAngle = (this.avatar.rotation + this.buildRotationAngle) % (Math.PI * 2);
 
@@ -685,11 +685,11 @@ class GameApp {
           let pz = this.avatar.position.z + Math.cos(rot) * 1.6;
           let gy = this.island.getTerrainHeight(px, pz);
 
-          const { hit } = this.getCrosshairTarget(6.0);
+          const { hit, structure } = this.getCrosshairTarget(6.0);
           if (hit && hit.point) {
             px = hit.point.x;
             pz = hit.point.z;
-            gy = this.island.getTerrainHeight(px, pz);
+            gy = structure ? Math.max(this.island.getTerrainHeight(px, pz), hit.point.y) : this.island.getTerrainHeight(px, pz);
           }
 
           const placementAngle = (this.avatar.rotation + this.buildRotationAngle) % (Math.PI * 2);

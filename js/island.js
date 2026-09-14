@@ -1204,6 +1204,10 @@ export class SkyIsland {
    */
   getSnappedBuildPosition(rawX, rawZ, activeType, rotationAngle = 0) {
     const terrainY = this.getTerrainHeight(rawX, rawZ);
+    // Auto-adjustment grid snapping is strictly for wooden stairs
+    if (activeType !== 'wood_stairs') {
+      return { x: rawX, z: rawZ, y: terrainY, snapped: false };
+    }
     if (!this.placedStructures || this.placedStructures.length === 0) {
       return { x: rawX, z: rawZ, y: terrainY, snapped: false };
     }
