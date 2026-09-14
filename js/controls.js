@@ -11,8 +11,9 @@ export class GameControls {
     this.inventory = inventory;
     this.gameApp = gameApp;
 
-    // Pointer Lock State
+    // Pointer Lock & Camera View States
     this.isLocked = false;
+    this.isFirstPerson = false; // Toggle via Key V (First-Person Eye View vs Third-Person)
 
     // Minecraft Mouse Look Angles
     this.cameraYaw = 0;
@@ -93,9 +94,15 @@ export class GameControls {
       this.cameraYaw -= movementX * this.mouseSensitivity;
       this.cameraPitch += movementY * this.mouseSensitivity;
 
-      const maxPitch = Math.PI / 2.3;
-      const minPitch = 0.08;
-      this.cameraPitch = Math.max(minPitch, Math.min(maxPitch, this.cameraPitch));
+      if (this.isFirstPerson) {
+        const maxPitch = Math.PI / 2.2;
+        const minPitch = -Math.PI / 2.2;
+        this.cameraPitch = Math.max(minPitch, Math.min(maxPitch, this.cameraPitch));
+      } else {
+        const maxPitch = Math.PI / 2.3;
+        const minPitch = 0.08;
+        this.cameraPitch = Math.max(minPitch, Math.min(maxPitch, this.cameraPitch));
+      }
     });
 
     // Prevent browser context menu on right click
@@ -127,6 +134,20 @@ export class GameControls {
       if (['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'].includes(e.code)) {
         const slotIdx = parseInt(e.code.replace('Digit', ''), 10) - 1;
         if (this.inventory) this.inventory.selectHotbar(slotIdx);
+        return;
+      }
+
+      // Key V: Toggle Viewpoint Mode (First-Person Eye View vs Third-Person View)
+      if (e.code === 'KeyV') {
+        this.isFirstPerson = !this.isFirstPerson;
+        if (this.isFirstPerson) {
+          this.cameraPitch = 0; // Reset pitch to level eye height
+        } else {
+          this.cameraPitch = 0.25; // Restore 3rd person default angle
+        }
+        if (this.inventory && this.inventory.showToast) {
+          this.inventory.showToast(this.isFirstPerson ? 'View: First-Person (Eye View)' : 'View: Third-Person');
+        }
         return;
       }
 
@@ -185,7 +206,7 @@ export class GameControls {
 
     // Mouse Wheel Zoom
     window.addEventListener('wheel', (e) => {
-      if (!this.isLocked) return;
+      if (!this.isLocked || this.isFirstPerson) return;
       this.cameraDistance += e.deltaY * 0.008;
       this.cameraDistance = Math.max(3.5, Math.min(18.0, this.cameraDistance));
     });
@@ -223,26 +244,57 @@ export class GameControls {
       this.avatar.velocity.z *= 0.82;
     }
 
-    // 2. Camera Positioning Behind Avatar
-    const avatarPos = this.avatar.position.clone();
-    avatarPos.y += 1.5;
+    if (this.isFirstPerson) {
+      // First-Person Mode: Hide local avatar body so camera inside head isn't obstructed
+      if (this.avatar && this.avatar.group) {
+        this.avatar.group.visible = false;
+      }
 
-    const horizontalDist = this.cameraDistance * Math.cos(this.cameraPitch);
-    const verticalDist = this.cameraDistance * Math.sin(this.cameraPitch);
+      // Position camera directly at user eye level (1.62m above ground)
+      const eyePos = new THREE.Vector3(
+        this.avatar.position.x,
+        this.avatar.position.y + 1.62,
+        this.avatar.position.z
+      );
 
-    const targetCamX = avatarPos.x - Math.sin(this.cameraYaw) * horizontalDist;
-    const targetCamZ = avatarPos.z - Math.cos(this.cameraYaw) * horizontalDist;
-    
-    let targetCamY = avatarPos.y + verticalDist;
-    const minCamY = terrainHeightAtCamera + 1.2;
-    if (targetCamY < minCamY) {
-      targetCamY = minCamY;
+      const lookX = Math.sin(this.cameraYaw) * Math.cos(this.cameraPitch);
+      const lookY = -Math.sin(this.cameraPitch);
+      const lookZ = Math.cos(this.cameraYaw) * Math.cos(this.cameraPitch);
+
+      const targetLook = new THREE.Vector3(
+        eyePos.x + lookX * 10,
+        eyePos.y + lookY * 10,
+        eyePos.z + lookZ * 10
+      );
+
+      this.camera.position.copy(eyePos);
+      this.camera.lookAt(targetLook);
+    } else {
+      // Third-Person Mode: Ensure avatar body is visible
+      if (this.avatar && this.avatar.group) {
+        this.avatar.group.visible = true;
+      }
+
+      const avatarPos = this.avatar.position.clone();
+      avatarPos.y += 1.5;
+
+      const horizontalDist = this.cameraDistance * Math.cos(this.cameraPitch);
+      const verticalDist = this.cameraDistance * Math.sin(this.cameraPitch);
+
+      const targetCamX = avatarPos.x - Math.sin(this.cameraYaw) * horizontalDist;
+      const targetCamZ = avatarPos.z - Math.cos(this.cameraYaw) * horizontalDist;
+      
+      let targetCamY = avatarPos.y + verticalDist;
+      const minCamY = terrainHeightAtCamera + 1.2;
+      if (targetCamY < minCamY) {
+        targetCamY = minCamY;
+      }
+
+      const targetCamPos = new THREE.Vector3(targetCamX, targetCamY, targetCamZ);
+
+      // Smooth camera lerp
+      this.camera.position.lerp(targetCamPos, Math.min(1.0, 16 * deltaTime));
+      this.camera.lookAt(avatarPos);
     }
-
-    const targetCamPos = new THREE.Vector3(targetCamX, targetCamY, targetCamZ);
-
-    // Smooth camera lerp
-    this.camera.position.lerp(targetCamPos, Math.min(1.0, 16 * deltaTime));
-    this.camera.lookAt(avatarPos);
   }
 }

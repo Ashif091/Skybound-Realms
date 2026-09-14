@@ -360,6 +360,7 @@ export class InventorySystem {
 
     if (avatarInstance.group) {
       this.miniAvatarGroup = avatarInstance.group.clone();
+      this.miniAvatarGroup.visible = true;
       this.miniAvatarGroup.position.set(0, -0.2, 0);
 
       // Remove overhead name tag from 3D mini projection to avoid double name display

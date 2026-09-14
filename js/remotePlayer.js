@@ -62,10 +62,10 @@ export class RemotePlayer {
     headMesh.position.y = 0.25;
     this.headGroup.add(headMesh);
 
-    // Hair Top
-    const hairTopGeo = new THREE.BoxGeometry(0.52, 0.20, 0.52);
+    // Hair Top (Slightly larger height/position to prevent coplanar face Z-fighting reflection glitch on head top)
+    const hairTopGeo = new THREE.BoxGeometry(0.53, 0.22, 0.53);
     const hairTop = new THREE.Mesh(hairTopGeo, hairMat);
-    hairTop.position.set(0, 0.40, 0);
+    hairTop.position.set(0, 0.415, 0);
     this.headGroup.add(hairTop);
 
     // Hair Fringe
