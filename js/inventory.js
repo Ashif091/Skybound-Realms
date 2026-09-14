@@ -8,6 +8,7 @@ const ITEM_ICONS = {
   wood_wall_door: `<svg width="28" height="28" viewBox="0 0 32 32" fill="none"><rect x="6" y="4" width="20" height="24" rx="2" fill="#9e6a38" stroke="#5c3a21" stroke-width="1.5"/><path d="M12 28V14H20V28" fill="#5c3a21" stroke="#3d281c" stroke-width="1.2"/></svg>`,
   wood_floor: `<svg width="28" height="28" viewBox="0 0 32 32" fill="none"><rect x="4" y="10" width="24" height="12" rx="2" fill="#9e6a38" stroke="#5c3a21" stroke-width="1.5"/><line x1="12" y1="10" x2="12" y2="22" stroke="#5c3a21" stroke-width="1.2"/><line x1="20" y1="10" x2="20" y2="22" stroke="#5c3a21" stroke-width="1.2"/></svg>`,
   wood_roof: `<svg width="28" height="28" viewBox="0 0 32 32" fill="none"><path d="M4 18L16 6L28 18H4Z" fill="#9e6a38" stroke="#5c3a21" stroke-width="1.5"/><rect x="6" y="18" width="20" height="6" fill="#8b5a2b" stroke="#5c3a21" stroke-width="1.2"/></svg>`,
+  wood_stairs: `<svg width="28" height="28" viewBox="0 0 32 32" fill="none"><path d="M4 26H28V20H22V14H16V8H10V26Z" fill="#9e6a38" stroke="#5c3a21" stroke-width="1.5"/><line x1="10" y1="26" x2="10" y2="8" stroke="#5c3a21" stroke-width="1"/><line x1="16" y1="26" x2="16" y2="14" stroke="#5c3a21" stroke-width="1"/><line x1="22" y1="26" x2="22" y2="20" stroke="#5c3a21" stroke-width="1"/></svg>`,
   wood_box: `<svg width="28" height="28" viewBox="0 0 32 32" fill="none"><rect x="4" y="14" width="24" height="13" rx="2" fill="#8b5a2b" stroke="#3d281c" stroke-width="1.5"/><path d="M4 14C4 9.5 8.5 6 16 6C23.5 6 28 9.5 28 14H4Z" fill="#a06d3b" stroke="#3d281c" stroke-width="1.5"/><rect x="3.5" y="13" width="25" height="3" fill="#d97706" stroke="#3d281c" stroke-width="1"/><rect x="9" y="6.5" width="3" height="20.5" fill="#eab308" stroke="#3d281c" stroke-width="0.8"/><rect x="20" y="6.5" width="3" height="20.5" fill="#eab308" stroke="#3d281c" stroke-width="0.8"/><circle cx="10.5" cy="9" r="0.6" fill="#3d281c"/><circle cx="10.5" cy="18" r="0.6" fill="#3d281c"/><circle cx="21.5" cy="9" r="0.6" fill="#3d281c"/><circle cx="21.5" cy="18" r="0.6" fill="#3d281c"/><rect x="14" y="12" width="4" height="6" rx="1" fill="#f59e0b" stroke="#3d281c" stroke-width="1"/><rect x="14.5" y="16" width="3" height="3" rx="0.5" fill="#78350f" stroke="#3d281c" stroke-width="0.6"/><line x1="4" y1="20" x2="28" y2="20" stroke="#5c4033" stroke-width="0.8"/></svg>`
 };
 
@@ -261,7 +262,8 @@ export class InventorySystem {
         { type: 'wood_wall_window', name: 'Wall with Window', cost: 2, costName: '2 Wood Logs', desc: 'Wall Panel with Window Frame Cutout (Costs 2 Logs)' },
         { type: 'wood_wall_door', name: 'Wall with Doorway', cost: 2, costName: '2 Wood Logs', desc: 'Wall Panel with Doorway Entrance Hole (Costs 2 Logs)' },
         { type: 'wood_floor', name: 'Wood Floor', cost: 1, costName: '1 Wood Log', desc: 'Flat Ground Floor Panel (Costs 1 Log)' },
-        { type: 'wood_roof', name: 'Wood Roof', cost: 1, costName: '1 Wood Log', desc: 'Top Elevated Roof Panel (Costs 1 Log)' }
+        { type: 'wood_roof', name: 'Wood Roof', cost: 1, costName: '1 Wood Log', desc: 'Top Elevated Roof Panel (Costs 1 Log)' },
+        { type: 'wood_stairs', name: 'Wooden Stairs', cost: 3, costName: '3 Wood Logs', desc: '4-Step Wooden Staircase to Reach Roofs & High Ground (Costs 3 Logs)' }
       ],
       basic: [
         { type: 'crafting_bench', name: 'Crafting Table', cost: 2, costName: '2 Wood Logs', desc: '4-Legged Wooden Crafting Station (Costs 2 Logs)' },

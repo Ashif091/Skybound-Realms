@@ -726,7 +726,7 @@ export class SkyIsland {
    */
   punchStructureNear(avX, avZ, facingAngle) {
     let nearestIndex = -1;
-    let minDist = 1.85;
+    let minDist = 2.6; // Increased to 2.6m to easily reach 2.7m structures
 
     for (let i = 0; i < this.placedStructures.length; i++) {
       const struct = this.placedStructures[i];
@@ -740,8 +740,11 @@ export class SkyIsland {
     if (nearestIndex === -1) return null;
 
     const struct = this.placedStructures[nearestIndex];
-    struct.health = (struct.health !== undefined ? struct.health : 15) - 5;
-    struct.shakeTimer = 0.45;
+    const maxHP = struct.maxHealth || (struct.type === 'wood_stairs' ? 30 : 15);
+    if (struct.health === undefined) struct.health = maxHP;
+
+    struct.health -= 5;
+    struct.shakeTimer = 0.45; // Trigger wobbling shake animation on hit
 
     if (struct.health <= 0) {
       this.group.remove(struct.mesh);
@@ -772,7 +775,7 @@ export class SkyIsland {
       return { broken: true, x: struct.x, z: struct.z, y: struct.y, itemType: 'log', structType: struct.type };
     }
 
-    return { broken: false, x: struct.x, z: struct.z, y: struct.y, health: struct.health, maxHealth: 15, itemType: struct.type || 'log', structType: struct.type };
+    return { broken: false, x: struct.x, z: struct.z, y: struct.y, health: struct.health, maxHealth: maxHP, itemType: struct.type || 'log', structType: struct.type };
   }
 
   /**
@@ -786,9 +789,10 @@ export class SkyIsland {
    * Places a 3D Wood Wall Structure (2.7m wide x 2.7m tall = 1.5x player height)
    * Uses tight 0.15m colliders along wall centerline so players can walk right up to touch the wall surface.
    */
-  placeWoodWall(x, z, rotationAngle = 0) {
-    const y = this.getTerrainHeight(x, z);
-    if (y < -1.0) return false;
+  placeWoodWall(x, z, rotationAngle = 0, customY = null) {
+    const terrainY = this.getTerrainHeight(x, z);
+    if (terrainY < -1.0) return false;
+    const y = customY !== null ? customY : terrainY;
 
     const wallGroup = new THREE.Group();
     wallGroup.position.set(x, y + 1.35, z); // Vertical center at 1.35m
@@ -830,9 +834,10 @@ export class SkyIsland {
    * Places a 3D Wood Wall with Window Cutout & Openable Window Shutters (2.7m wide x 2.7m tall)
    * Open window allows full 100% clear sight through the window hole to the outside world!
    */
-  placeWoodWallWindow(x, z, rotationAngle = 0) {
-    const y = this.getTerrainHeight(x, z);
-    if (y < -1.0) return false;
+  placeWoodWallWindow(x, z, rotationAngle = 0, customY = null) {
+    const terrainY = this.getTerrainHeight(x, z);
+    if (terrainY < -1.0) return false;
+    const y = customY !== null ? customY : terrainY;
 
     const wallGroup = new THREE.Group();
     wallGroup.position.set(x, y + 1.35, z);
@@ -951,9 +956,10 @@ export class SkyIsland {
    * Places a 3D Wood Wall with Doorway Opening & Interactive Swinging Wooden Door (2.7m wide x 2.7m tall)
    * Costs 4 Wood Logs. Door opens and closes on right click!
    */
-  placeWoodWallDoor(x, z, rotationAngle = 0) {
-    const y = this.getTerrainHeight(x, z);
-    if (y < -1.0) return false;
+  placeWoodWallDoor(x, z, rotationAngle = 0, customY = null) {
+    const terrainY = this.getTerrainHeight(x, z);
+    if (terrainY < -1.0) return false;
+    const y = customY !== null ? customY : terrainY;
 
     const wallGroup = new THREE.Group();
     wallGroup.position.set(x, y + 1.35, z);
@@ -1130,29 +1136,45 @@ export class SkyIsland {
 
     for (let i = 0; i < this.placedStructures.length; i++) {
       const s = this.placedStructures[i];
-      // 2.7m x 2.7m footprint check with rotation angle
+      // 2.7m x 2.7m footprint check with exact inverse rotation matrix
       const dx = x - s.x;
       const dz = z - s.z;
-      const localX = dx * Math.cos(-s.rotationAngle) - dz * Math.sin(-s.rotationAngle);
-      const localZ = dx * Math.sin(-s.rotationAngle) + dz * Math.cos(-s.rotationAngle);
+      const cosA = Math.cos(s.rotationAngle || 0);
+      const sinA = Math.sin(s.rotationAngle || 0);
+      const localX = dx * cosA - dz * sinA;
+      const localZ = dx * sinA + dz * cosA;
 
-      if (Math.abs(localX) <= 1.40 && Math.abs(localZ) <= 1.40) {
+      if (Math.abs(localX) <= 1.45) {
         if (s.type === 'wood_roof') {
-          const roofBottom = s.y + 2.63; // Bottom surface of roof panel at y + 2.63m
-          const roofTop = s.y + 2.77;    // Top surface of roof panel at y + 2.77m
+          if (Math.abs(localZ) <= 1.40) {
+            const roofBottom = s.y + 2.63;
+            const roofTop = s.y + 2.77;
 
-          // Ceiling check: Avatar head is below roof bottom
-          if (avY + 1.8 <= roofBottom + 0.35) {
-            ceilingY = Math.min(ceilingY, roofBottom);
-          }
-          // Ground check: Avatar is standing/falling on top of roof
-          if (avY >= roofTop - 0.45) {
-            groundY = Math.max(groundY, roofTop);
+            if (avY + 1.8 <= roofBottom + 0.35) {
+              ceilingY = Math.min(ceilingY, roofBottom);
+            }
+            if (avY >= roofTop - 0.45) {
+              groundY = Math.max(groundY, roofTop);
+            }
           }
         } else if (s.type === 'wood_floor') {
-          const floorTop = s.y + 0.12;
-          if (avY >= s.y - 0.2) {
-            groundY = Math.max(groundY, floorTop);
+          if (Math.abs(localZ) <= 1.40) {
+            const floorTop = s.y + 0.12;
+            if (avY >= s.y - 0.2) {
+              groundY = Math.max(groundY, floorTop);
+            }
+          }
+        } else if (s.type === 'wood_stairs') {
+          // Footprint check: width <= 1.45m, depth -1.65m to +1.65m
+          if (Math.abs(localX) <= 1.45 && localZ >= -1.65 && localZ <= 1.65) {
+            // Linear continuous slope from s.y (at localZ = -1.35) to s.y + 2.70 (at localZ = +1.35)
+            const t = Math.max(0.0, Math.min(1.0, (localZ + 1.35) / 2.70));
+            const rampY = s.y + t * 2.70;
+
+            // ONLY apply stair ground height if avatar elevation is near local ramp height
+            if (avY >= rampY - 0.45 && avY <= rampY + 1.50) {
+              groundY = Math.max(groundY, rampY);
+            }
           }
         }
       }
@@ -1161,12 +1183,100 @@ export class SkyIsland {
     return { groundY, ceilingY };
   }
 
+  getHighestStructureAt(x, z, searchRadius = 1.4) {
+    let highest = null;
+    let maxY = -999;
+    for (let i = 0; i < this.placedStructures.length; i++) {
+      const s = this.placedStructures[i];
+      const dist = Math.hypot(s.x - x, s.z - z);
+      if (dist <= searchRadius && s.y > maxY) {
+        maxY = s.y;
+        highest = s;
+      }
+    }
+    return highest;
+  }
+
+  /**
+   * Calculates smart grid & edge snapping for building placement (Walls, Floors, Roofs, Stairs).
+   * Snaps the wireframe preview box and placement location to adjacent grid edges (2.7m modules)
+   * or stacks seamlessly on top of existing structures.
+   */
+  getSnappedBuildPosition(rawX, rawZ, activeType, rotationAngle = 0) {
+    const terrainY = this.getTerrainHeight(rawX, rawZ);
+    if (!this.placedStructures || this.placedStructures.length === 0) {
+      return { x: rawX, z: rawZ, y: terrainY, snapped: false };
+    }
+
+    const GRID_SIZE = 2.70;
+    const SNAP_THRESHOLD = 2.1; // Proximity threshold (in meters) to trigger edge snapping
+
+    let bestSnap = null;
+    let minSnapDist = SNAP_THRESHOLD;
+
+    for (let i = 0; i < this.placedStructures.length; i++) {
+      const s = this.placedStructures[i];
+      const distToCenter = Math.hypot(rawX - s.x, rawZ - s.z);
+
+      if (distToCenter > 4.8) continue; // Skip distant structures
+
+      const sCos = Math.cos(s.rotationAngle || 0);
+      const sSin = Math.sin(s.rotationAngle || 0);
+
+      // 1. Stack on top (same X, Z cell)
+      const topY = s.y + ((s.type === 'wood_floor' || s.type === 'wood_roof') ? 0.12 : 2.70);
+      const topPoint = { x: s.x, z: s.z, y: topY, dist: distToCenter };
+
+      // 2. Front connected grid edge (along local Z forward)
+      const frontX = s.x + GRID_SIZE * sSin;
+      const frontZ = s.z + GRID_SIZE * sCos;
+      const frontDist = Math.hypot(rawX - frontX, rawZ - frontZ);
+      const frontY = (s.type === 'wood_stairs' && activeType === 'wood_stairs') ? (s.y + 2.70) : s.y;
+      const frontPoint = { x: frontX, z: frontZ, y: frontY, dist: frontDist };
+
+      // 3. Back connected grid edge (along local Z backward)
+      const backX = s.x - GRID_SIZE * sSin;
+      const backZ = s.z - GRID_SIZE * sCos;
+      const backDist = Math.hypot(rawX - backX, rawZ - backZ);
+      const backY = (s.type === 'wood_stairs' && activeType === 'wood_stairs') ? Math.max(terrainY, s.y - 2.70) : s.y;
+      const backPoint = { x: backX, z: backZ, y: backY, dist: backDist };
+
+      // 4. Left connected grid edge
+      const leftX = s.x - GRID_SIZE * sCos;
+      const leftZ = s.z + GRID_SIZE * sSin;
+      const leftDist = Math.hypot(rawX - leftX, rawZ - leftZ);
+      const leftPoint = { x: leftX, z: leftZ, y: s.y, dist: leftDist };
+
+      // 5. Right connected grid edge
+      const rightX = s.x + GRID_SIZE * sCos;
+      const rightZ = s.z - GRID_SIZE * sSin;
+      const rightDist = Math.hypot(rawX - rightX, rawZ - rightZ);
+      const rightPoint = { x: rightX, z: rightZ, y: s.y, dist: rightDist };
+
+      const candidates = [topPoint, frontPoint, backPoint, leftPoint, rightPoint];
+
+      candidates.forEach(c => {
+        if (c.dist < minSnapDist) {
+          minSnapDist = c.dist;
+          bestSnap = c;
+        }
+      });
+    }
+
+    if (bestSnap) {
+      return { x: bestSnap.x, z: bestSnap.z, y: bestSnap.y, snapped: true };
+    }
+
+    return { x: rawX, z: rawZ, y: terrainY, snapped: false };
+  }
+
   /**
    * Places a 3D Wood Floor Structure (2.7m x 2.7m flat ground panel = 1.5x player height)
    */
-  placeWoodFloor(x, z, rotationAngle = 0) {
-    const y = this.getTerrainHeight(x, z);
-    if (y < -1.0) return false;
+  placeWoodFloor(x, z, rotationAngle = 0, customY = null) {
+    const terrainY = this.getTerrainHeight(x, z);
+    if (terrainY < -1.0) return false;
+    const y = customY !== null ? customY : terrainY;
 
     const floorGroup = new THREE.Group();
     floorGroup.position.set(x, y + 0.06, z);
@@ -1188,9 +1298,10 @@ export class SkyIsland {
   /**
    * Places a 3D Wood Roof Structure (2.7m x 2.7m top ceiling panel on top of walls at height y + 2.7m)
    */
-  placeWoodRoof(x, z, rotationAngle = 0) {
-    const y = this.getTerrainHeight(x, z);
-    if (y < -1.0) return false;
+  placeWoodRoof(x, z, rotationAngle = 0, customY = null) {
+    const terrainY = this.getTerrainHeight(x, z);
+    if (terrainY < -1.0) return false;
+    const y = customY !== null ? (customY - 2.70) : terrainY;
 
     const roofGroup = new THREE.Group();
     roofGroup.position.set(x, y + 2.70, z);
@@ -1206,6 +1317,105 @@ export class SkyIsland {
 
     this.placedStructures.push({ mesh: roofGroup, x, z, y, type: 'wood_roof', rotationAngle, health: 15, shakeTimer: 0 });
     roofGroup.userData.structureRef = this.placedStructures[this.placedStructures.length - 1];
+    return true;
+  }
+
+  /**
+   * Places a 3D Wood Stairs Structure (2.7m x 2.7m x 2.7m open wooden plank ramp matching reference image)
+   * 30 HP, 6 hand-punch hits to break, drops 1 Wood Log on break.
+   */
+  placeWoodStairs(x, z, rotationAngle = 0, customY = null) {
+    const terrainY = this.getTerrainHeight(x, z);
+    if (terrainY < -1.0) return false;
+
+    let y = customY !== null ? customY : terrainY;
+    if (customY === null) {
+      const existing = this.getHighestStructureAt(x, z);
+      if (existing) {
+        if (existing.type === 'wood_stairs' || existing.type === 'wood_wall' || existing.type === 'wood_wall_window' || existing.type === 'wood_wall_door') {
+          y = existing.y + 2.70;
+        } else if (existing.type === 'wood_floor' || existing.type === 'wood_roof') {
+          y = existing.y + 0.12;
+        }
+      }
+    }
+
+    const stairsGroup = new THREE.Group();
+    stairsGroup.position.set(x, y, z);
+    stairsGroup.rotation.y = rotationAngle;
+
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x9e6a38, flatShading: true, roughness: 0.7 });
+    const darkWoodMat = new THREE.MeshStandardMaterial({ color: 0x5c3a21, flatShading: true, roughness: 0.8 });
+
+    const totalWidth = 2.70;
+    const totalDepth = 2.70;
+    const totalHeight = 2.70;
+
+    // 1. Two Diagonal Side Stringer Beams (Left & Right Rails) - Matching Reference Image
+    const stringerLen = Math.hypot(totalHeight, totalDepth);
+    const stringerGeo = new THREE.BoxGeometry(0.18, stringerLen + 0.2, 0.28);
+    stringerGeo.rotateX(Math.atan2(totalHeight, totalDepth));
+
+    const leftStringer = new THREE.Mesh(stringerGeo, darkWoodMat);
+    leftStringer.position.set(-totalWidth / 2 + 0.09, totalHeight / 2, 0);
+    leftStringer.castShadow = true;
+    leftStringer.receiveShadow = true;
+    stairsGroup.add(leftStringer);
+
+    const rightStringer = new THREE.Mesh(stringerGeo, darkWoodMat);
+    rightStringer.position.set(totalWidth / 2 - 0.09, totalHeight / 2, 0);
+    rightStringer.castShadow = true;
+    rightStringer.receiveShadow = true;
+    stairsGroup.add(rightStringer);
+
+    // 2. 7 Flat Horizontal Wooden Step Planks Spanning Across (Open Ramp Style)
+    const numPlanks = 7;
+    const plankWidth = totalWidth - 0.24; // Fits between the left and right side beams
+    const plankGeo = new THREE.BoxGeometry(plankWidth, 0.08, 0.36);
+
+    for (let i = 0; i < numPlanks; i++) {
+      const ratio = i / (numPlanks - 1); // 0.0 to 1.0
+      const pZ = -totalDepth / 2 + 0.25 + ratio * (totalDepth - 0.50);
+      const pY = 0.20 + ratio * (totalHeight - 0.35);
+
+      const plankMesh = new THREE.Mesh(plankGeo, woodMat);
+      plankMesh.position.set(0, pY, pZ);
+      plankMesh.castShadow = true;
+      plankMesh.receiveShadow = true;
+      stairsGroup.add(plankMesh);
+    }
+
+    this.group.add(stairsGroup);
+
+    // Outer Side Colliders (Left & Right rails at localX = ±1.40m) leaving stair path 100% wide open
+    const cosA = Math.cos(rotationAngle);
+    const sinA = Math.sin(rotationAngle);
+    const toWorld = (lx, lz) => ({
+      x: x + lx * cosA - lz * sinA,
+      z: z + lx * sinA + lz * cosA,
+      radius: 0.16
+    });
+
+    const colliders = [
+      toWorld(-1.40, -0.6), toWorld(-1.40, 0.0), toWorld(-1.40, 0.6),
+      toWorld(1.40, -0.6), toWorld(1.40, 0.0), toWorld(1.40, 0.6)
+    ];
+    colliders.forEach(c => this.treeColliders.push(c));
+
+    this.placedStructures.push({
+      mesh: stairsGroup,
+      colliders,
+      x,
+      z,
+      y,
+      type: 'wood_stairs',
+      rotationAngle,
+      health: 30,
+      maxHealth: 30,
+      shakeTimer: 0
+    });
+
+    stairsGroup.userData.structureRef = this.placedStructures[this.placedStructures.length - 1];
     return true;
   }
 
@@ -1422,9 +1632,14 @@ export class SkyIsland {
     blocksList.forEach(b => {
       const rot = b.rotationAngle || b.rot || 0;
       const type = b.blockType || 'crafting_bench';
+      const y = b.y !== undefined ? b.y : (b.customY !== undefined ? b.customY : null);
 
-      // Deduplicate: Skip if block already exists at position, but sync box storage if needed
-      const existing = this.placedStructures.find(s => Math.hypot(s.x - b.x, s.z - b.z) < 0.4 && s.type === type);
+      // Deduplicate: Skip if block already exists at exact (x, y, z) position
+      const existing = this.placedStructures.find(s =>
+        Math.hypot(s.x - b.x, s.z - b.z) < 0.4 &&
+        (y === null || Math.abs((s.y || 0) - y) < 0.4) &&
+        s.type === type
+      );
       if (existing) {
         if (type === 'wood_box' && b.storage && Array.isArray(b.storage)) {
           existing.storage = JSON.parse(JSON.stringify(b.storage));
@@ -1437,15 +1652,17 @@ export class SkyIsland {
       if (type === 'crafting_bench') {
         this.placeCraftingBench(b.x, b.z, rot);
       } else if (type === 'wood_wall') {
-        this.placeWoodWall(b.x, b.z, rot);
+        this.placeWoodWall(b.x, b.z, rot, y);
       } else if (type === 'wood_wall_window') {
-        this.placeWoodWallWindow(b.x, b.z, rot);
+        this.placeWoodWallWindow(b.x, b.z, rot, y);
       } else if (type === 'wood_wall_door') {
-        this.placeWoodWallDoor(b.x, b.z, rot);
+        this.placeWoodWallDoor(b.x, b.z, rot, y);
       } else if (type === 'wood_floor') {
-        this.placeWoodFloor(b.x, b.z, rot);
+        this.placeWoodFloor(b.x, b.z, rot, y);
       } else if (type === 'wood_roof') {
-        this.placeWoodRoof(b.x, b.z, rot);
+        this.placeWoodRoof(b.x, b.z, rot, y);
+      } else if (type === 'wood_stairs') {
+        this.placeWoodStairs(b.x, b.z, rot, y);
       } else if (type === 'wood_box') {
         this.placeWoodBox(b.x, b.z, rot, b.storage);
       } else {
@@ -1455,9 +1672,9 @@ export class SkyIsland {
   }
 
   /**
-   * Removes a placed block, crafting table, or structure at (x, z) from scene and physics
+   * Removes a placed block, crafting table, or structure at (x, z, y) from scene and physics
    */
-  removeBlockAt(x, z, blockType) {
+  removeBlockAt(x, z, blockType, y = null) {
     // 1. Check in placedCraftingTables
     if (blockType === 'crafting_bench' || !blockType) {
       const idx = this.placedCraftingTables.findIndex(t => Math.hypot(t.x - x, t.z - z) < 1.85);
@@ -1474,6 +1691,7 @@ export class SkyIsland {
     // 2. Check in placedStructures
     const sIdx = this.placedStructures.findIndex(s =>
       Math.hypot(s.x - x, s.z - z) < 1.85 &&
+      (y === null || Math.abs((s.y || 0) - y) < 1.85) &&
       (!blockType || blockType === 'log' || s.type === blockType)
     );
     if (sIdx !== -1) {

@@ -360,18 +360,21 @@ export class Avatar {
       }
     }
 
-    // Smooth Terrain / Floor / Roof Height Snap & Gravity
+    // Smooth Terrain / Floor / Roof / Stairs Height Snap & Gravity
     const targetY = effectiveGroundY;
 
-    // Unground immediately when stepping off cliff edge or roof edge into drop-off
+    // Unground immediately when stepping off cliff edge into deep drop-off
     if (targetY < -1.0 || targetY < this.position.y - 1.2) {
       this.isGrounded = false;
     }
 
+    const yDiff = targetY - this.position.y;
+
     if (this.isGrounded) {
-      // Smoothly snap to terrain/roof height when grounded
-      this.position.y += (targetY - this.position.y) * Math.min(1.0, 20 * deltaTime);
-      if (Math.abs(targetY - this.position.y) < 0.01) {
+      // High-speed step-up response when walking up slopes & connected stairs
+      const lerpSpeed = (yDiff > 0 && yDiff <= 0.85) ? 35 : 22;
+      this.position.y += yDiff * Math.min(1.0, lerpSpeed * deltaTime);
+      if (Math.abs(yDiff) < 0.005) {
         this.position.y = targetY;
       }
       this.velocity.y = 0;

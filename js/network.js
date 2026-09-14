@@ -166,7 +166,7 @@ export class NetworkManager {
       }
 
       case 'blockBrokenSync': {
-        if (this.gameApp.island) this.gameApp.island.removeBlockAt(msg.x, msg.z, msg.blockType);
+        if (this.gameApp.island) this.gameApp.island.removeBlockAt(msg.x, msg.z, msg.blockType, msg.y);
         break;
       }
 
@@ -253,12 +253,25 @@ export class NetworkManager {
     this.send({ type: 'pickupDrop', dropId });
   }
 
-  sendBlockPlaced(x, z, rot = 0, blockType = 'crafting_bench') {
-    this.send({ type: 'blockPlaced', x: Math.round(x * 100) / 100, z: Math.round(z * 100) / 100, rot: Math.round(rot * 100) / 100, blockType });
+  sendBlockPlaced(x, z, rot = 0, blockType = 'crafting_bench', y = null) {
+    this.send({
+      type: 'blockPlaced',
+      x: Math.round(x * 100) / 100,
+      y: y !== null ? Math.round(y * 100) / 100 : undefined,
+      z: Math.round(z * 100) / 100,
+      rot: Math.round(rot * 100) / 100,
+      blockType
+    });
   }
 
-  sendBlockBroken(x, z, blockType) {
-    this.send({ type: 'blockBroken', x: Math.round(x * 100) / 100, z: Math.round(z * 100) / 100, blockType });
+  sendBlockBroken(x, z, blockType, y = null) {
+    this.send({
+      type: 'blockBroken',
+      x: Math.round(x * 100) / 100,
+      y: y !== null ? Math.round(y * 100) / 100 : undefined,
+      z: Math.round(z * 100) / 100,
+      blockType
+    });
   }
 
   sendSaveInventory(slots, playerHp) {

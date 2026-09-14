@@ -148,7 +148,11 @@ async function connectMongo() {
       (worldDoc.drops || []).forEach(d => worldState.drops.set(d.dropId, d));
       const cleanedBlocks = [];
       (worldDoc.placedBlocks || []).forEach(b => {
-        const dup = cleanedBlocks.some(existing => Math.hypot(existing.x - b.x, existing.z - b.z) < 0.4 && existing.blockType === b.blockType);
+        const dup = cleanedBlocks.some(existing =>
+          Math.hypot(existing.x - b.x, existing.z - b.z) < 0.4 &&
+          Math.abs((existing.y || 0) - (b.y || 0)) < 0.4 &&
+          existing.blockType === b.blockType
+        );
         if (!dup) cleanedBlocks.push(b);
       });
       worldState.placedBlocks = cleanedBlocks;
@@ -350,11 +354,14 @@ async function startServer() {
 
         case 'blockPlaced': {
           const dupIdx = worldState.placedBlocks.findIndex(b =>
-            Math.hypot(b.x - data.x, b.z - data.z) < 0.4 && b.blockType === (data.blockType || 'crafting_bench')
+            Math.hypot(b.x - data.x, b.z - data.z) < 0.4 &&
+            Math.abs((b.y || 0) - (data.y || 0)) < 0.4 &&
+            b.blockType === (data.blockType || 'crafting_bench')
           );
           const existingStorage = (dupIdx !== -1) ? worldState.placedBlocks[dupIdx].storage : null;
           const block = {
             x: data.x,
+            y: data.y !== undefined ? data.y : 0,
             z: data.z,
             rot: data.rot || 0,
             blockType: data.blockType || 'crafting_bench',
@@ -402,9 +409,11 @@ async function startServer() {
           for (let i = worldState.placedBlocks.length - 1; i >= 0; i--) {
             const b = worldState.placedBlocks[i];
             const dist = Math.hypot(b.x - data.x, b.z - data.z);
-            if (dist < 1.85 && (!targetType || targetType === 'log' || b.blockType === targetType)) {
+            const distY = Math.abs((b.y || 0) - (data.y || 0));
+            if (dist < 1.85 && (data.y === undefined || distY < 1.85) && (!targetType || targetType === 'log' || b.blockType === targetType)) {
               worldState.placedBlocks.splice(i, 1);
               removedCount++;
+              break;
             }
           }
           if (removedCount === 0) {
@@ -412,7 +421,8 @@ async function startServer() {
             let closestIdx = -1;
             worldState.placedBlocks.forEach((b, i) => {
               const dist = Math.hypot(b.x - data.x, b.z - data.z);
-              if (dist < minDist) {
+              const distY = Math.abs((b.y || 0) - (data.y || 0));
+              if (dist < minDist && (data.y === undefined || distY < 2.5)) {
                 minDist = dist;
                 closestIdx = i;
               }
@@ -425,7 +435,7 @@ async function startServer() {
           if (removedCount > 0) {
             await saveWorldToDB();
           }
-          broadcast({ type: 'blockBrokenSync', x: data.x, z: data.z, blockType: data.blockType }, playerId);
+          broadcast({ type: 'blockBrokenSync', x: data.x, y: data.y, z: data.z, blockType: data.blockType }, playerId);
           break;
         }
 
