@@ -97,7 +97,10 @@ export class InventorySystem {
       <div class="inventory-modal">
         <div class="inv-header">
           <h2>Inventory & Crafting</h2>
-          <span class="close-hint">Press <kbd>E</kbd> or <kbd>Esc</kbd> to Close</span>
+          <div class="inv-header-actions">
+            <span class="close-hint">Press <kbd>E</kbd> or <kbd>Esc</kbd> to Close</span>
+            <button class="inv-close-btn" id="btn-close-inventory" title="Close Inventory">✕</button>
+          </div>
         </div>
 
         <div class="inv-body-layout">
@@ -154,6 +157,22 @@ export class InventorySystem {
 
     document.body.appendChild(invOverlay);
     this.invOverlayEl = invOverlay;
+
+    // Click outside modal to close inventory
+    invOverlay.addEventListener('click', (e) => {
+      if (e.target === invOverlay) {
+        this.toggleInventory();
+      }
+    });
+
+    const btnCloseInv = document.getElementById('btn-close-inventory');
+    if (btnCloseInv) {
+      btnCloseInv.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.toggleInventory();
+      });
+    }
 
     // Populate Inventory Modal Grids
     const mainGrid = document.getElementById('main-inv-grid');
@@ -496,6 +515,10 @@ export class InventorySystem {
   toggleInventory() {
     if (this.isTableOpen) {
       this.closeCraftingTableModal();
+      return;
+    }
+    if (this.isStorageOpen) {
+      this.closeStorageBoxModal();
       return;
     }
     this.isOpen = !this.isOpen;
@@ -856,9 +879,9 @@ export class InventorySystem {
   }
 
   dropAllItems(dropX, dropZ, dropY, itemDropManager, networkManager) {
-    if (this.isStorageOpen) this.closeStorageBox();
+    if (this.isStorageOpen) this.closeStorageBoxModal();
     if (this.isTableOpen) this.closeCraftingTableModal();
-    if (this.isOpen) this.close();
+    if (this.isOpen) this.toggleInventory();
 
     let itemsDropped = false;
     this.slots.forEach(slot => {
@@ -884,6 +907,24 @@ export class InventorySystem {
       if (networkManager) {
         networkManager.sendSaveInventory(this.getSlots(), 0);
       }
+    }
+  }
+
+  /**
+   * Clears all items from player inventory without dropping them (for void death)
+   */
+  clearAllItems(networkManager) {
+    if (this.isStorageOpen) this.closeStorageBoxModal();
+    if (this.isTableOpen) this.closeCraftingTableModal();
+    if (this.isOpen) this.toggleInventory();
+
+    this.slots.forEach(slot => {
+      slot.item = null;
+    });
+
+    this.updateUI();
+    if (networkManager) {
+      networkManager.sendSaveInventory(this.getSlots(), 0);
     }
   }
 

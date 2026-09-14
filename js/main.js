@@ -32,6 +32,10 @@ class GameApp {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.1;
+
+    // Enable High Quality Dynamic PCF Soft Shadows
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.container.appendChild(this.renderer.domElement);
 
     // Lighting Setup
@@ -41,9 +45,6 @@ class GameApp {
     this.dayNight = new DayNightCycle(this.scene);
     this.dayNight.onNewDayCallback = () => {
       if (this.island) this.island.respawnTrees(25);
-      if (this.inventory && this.inventory.showToast) {
-        this.inventory.showToast('🌅 Morning arrived! Cut-down trees have regrown randomly.');
-      }
       if (this.networkManager) this.networkManager.send({ type: 'respawnTrees' });
     };
 
@@ -550,15 +551,16 @@ class GameApp {
     let dropZ = this.avatar ? this.avatar.position.z : 0;
     let dropY = (this.island && this.avatar) ? this.island.getTerrainHeight(dropX, dropZ) : 1.0;
 
-    // If death happened in the void (y < -10.0 or terrainY < -1.0), drop items safely on island surface!
-    if (isVoidDeath || dropY < -1.0 || (this.avatar && this.avatar.position.y < -1.0)) {
-      dropX = 0;
-      dropZ = 0;
-      dropY = this.island ? Math.max(0.5, this.island.getTerrainHeight(0, 0)) : 1.0;
-    }
+    const isVoid = isVoidDeath || dropY < -1.0 || (this.avatar && this.avatar.position.y < -1.0);
 
-    if (this.inventory && this.itemDropManager) {
-      this.inventory.dropAllItems(dropX, dropZ, dropY, this.itemDropManager, this.networkManager);
+    if (this.inventory) {
+      if (isVoid) {
+        // Void Death: Delete/clear all held items (do NOT drop back to ground!)
+        this.inventory.clearAllItems(this.networkManager);
+      } else if (this.itemDropManager) {
+        // Normal Death on land: drop items at position
+        this.inventory.dropAllItems(dropX, dropZ, dropY, this.itemDropManager, this.networkManager);
+      }
     }
   }
 
@@ -604,7 +606,8 @@ class GameApp {
 
     // 1. Day/Night Celestial & Lighting Update
     if (this.dayNight) {
-      this.dayNight.update(deltaTime, this.ambientLight, this.hemiLight);
+      const avPos = this.avatar ? this.avatar.position : null;
+      this.dayNight.update(deltaTime, this.ambientLight, this.hemiLight, avPos);
     }
 
     // 2. Island Wobble & Tree Wobbling Animation Update

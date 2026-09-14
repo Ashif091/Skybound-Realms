@@ -90,6 +90,68 @@ export class SkyIsland {
     return texture;
   }
 
+  createGroundTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 1024;
+    const ctx = canvas.getContext('2d');
+
+    // 1. Uniform 40% lighter bright spring meadow green background
+    const bgGrad = ctx.createLinearGradient(0, 0, 1024, 1024);
+    bgGrad.addColorStop(0, '#b8f244');
+    bgGrad.addColorStop(0.5, '#c5fa57');
+    bgGrad.addColorStop(1, '#a6ea32');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, 1024, 1024);
+
+    // 2. Uniform, subtle grass blade details (no large shapes or splotches of color)
+    const bladeColors = ['#d8ff68', '#eaff8e', '#c0f644', '#a8e82a', '#e0ff7e'];
+    
+    for (let i = 0; i < 2200; i++) {
+      const cx = Math.random() * 1024;
+      const cy = Math.random() * 1024;
+      const color = bladeColors[Math.floor(Math.random() * bladeColors.length)];
+      const scale = 0.6 + Math.random() * 0.7;
+      const blades = 3 + Math.floor(Math.random() * 2);
+
+      ctx.fillStyle = color;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.3 * scale;
+
+      for (let b = 0; b < blades; b++) {
+        const angle = (b / blades) * Math.PI * 2 + (Math.random() * 0.4);
+        const len = (4 + Math.random() * 5) * scale;
+        const ex = cx + Math.cos(angle) * len;
+        const ey = cy + Math.sin(angle) * len;
+
+        ctx.beginPath();
+        ctx.arc(ex, ey, 1.8 * scale, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+      }
+    }
+
+    // 3. Fine natural micro grass specks for uniform texture depth
+    const noiseColors = ['#d8f868', '#b0ed35', '#f2ffa2', '#c5f850'];
+    for (let i = 0; i < 9000; i++) {
+      const x = Math.random() * 1024;
+      const y = Math.random() * 1024;
+      const size = 1.0 + Math.random() * 2.0;
+      ctx.fillStyle = noiseColors[Math.floor(Math.random() * noiseColors.length)];
+      ctx.fillRect(x, y, size, size);
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.repeat.set(1, 1);
+    return texture;
+  }
+
   getTerrainHeight(x, z) {
     const distFromCenter = Math.hypot(x / this.radiusX, z / this.radiusZ);
     if (distFromCenter >= 0.95) return -50;
@@ -122,10 +184,9 @@ export class SkyIsland {
 
     const pos = topGeo.attributes.position;
     const colors = [];
-    const colorTop = new THREE.Color(0x84d96a);
-    const colorVariation = new THREE.Color(0x96e07e);
-    const colorBasinMud = new THREE.Color(0x42352a);
-    const colorCliff = new THREE.Color(0x4a3e35);
+    const colorGrassMeadow = new THREE.Color(0xd4fa6a); // Clean uniform 40% lighter spring green
+    const colorBasinMud = new THREE.Color(0xd8cbba);    // Very light shore sand
+    const colorCliff = new THREE.Color(0xbbb0a2);       // Soft light cliff tone
 
     for (let i = 0; i < pos.count; i++) {
       let x = pos.getX(i);
@@ -145,30 +206,31 @@ export class SkyIsland {
       const y = this.getTerrainHeight(x, z);
       pos.setY(i, y === -50 ? -10.8 : y);
 
-      let c = colorTop.clone();
+      let c = colorGrassMeadow.clone();
       const distPond = Math.hypot(x - this.pondX, z - this.pondZ);
 
       if (distFromCenter > 0.84) {
         const cliffMix = Math.min(1.0, (distFromCenter - 0.84) / 0.11);
-        c.lerp(colorCliff, cliffMix);
+        c.lerp(colorCliff, cliffMix * 0.30);
       } else if (distPond < this.pondRadius) {
         const pondMix = 1.0 - (distPond / this.pondRadius);
-        c.lerp(colorBasinMud, pondMix * 0.75);
-      } else {
-        const mixRatio = (Math.sin(x * 0.15 + z * 0.15) + 1) * 0.5;
-        c.lerp(colorVariation, mixRatio * 0.4);
+        c.lerp(colorBasinMud, pondMix * 0.25);
       }
+
       colors.push(c.r, c.g, c.b);
     }
 
     topGeo.computeVertexNormals();
     topGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
+    this.groundTexture = this.createGroundTexture();
+
     const topMat = new THREE.MeshStandardMaterial({
+      map: this.groundTexture,
       vertexColors: true,
-      flatShading: true,
-      roughness: 0.8,
-      metalness: 0.05
+      flatShading: false, // Smooth shading to eliminate all triangle facet breaking lines
+      roughness: 0.88,
+      metalness: 0.0
     });
 
     const topMesh = new THREE.Mesh(topGeo, topMat);

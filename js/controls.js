@@ -160,8 +160,8 @@ export class GameControls {
         return;
       }
 
-      // Key E: Toggle Full Inventory
-      if (e.code === 'KeyE') {
+      // Key E: Toggle Full Inventory (Press E to Open, Press E to Close)
+      if (e.code === 'KeyE' || e.key === 'e' || e.key === 'E') {
         if (this.inventory) this.inventory.toggleInventory();
         return;
       }
