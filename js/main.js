@@ -106,10 +106,11 @@ class GameApp {
   }
 
   rotatePlacementPreview() {
-    this.buildRotationAngle = (this.buildRotationAngle + Math.PI / 2) % (Math.PI * 2);
+    // 6 Angle steps (60 degrees / Math.PI / 3 radians per step)
+    this.buildRotationAngle = (this.buildRotationAngle + Math.PI / 3) % (Math.PI * 2);
     if (this.inventory) {
-      const degrees = Math.round((this.buildRotationAngle * 180) / Math.PI);
-      this.inventory.showToast(`Structure Rotation: ${degrees} deg`);
+      const degrees = Math.round((this.buildRotationAngle * 180) / Math.PI) % 360;
+      this.inventory.showToast(`Placement Rotation: +${degrees}° (6-Axis)`);
     }
   }
 
@@ -405,47 +406,48 @@ class GameApp {
       const dropX = this.avatar.position.x + Math.sin(this.avatar.rotation) * 1.6;
       const dropZ = this.avatar.position.z + Math.cos(this.avatar.rotation) * 1.6;
       const groundY = this.island.getTerrainHeight(dropX, dropZ);
+      const placementAngle = (this.avatar.rotation + this.buildRotationAngle) % (Math.PI * 2);
 
       if (activeItem.type === 'crafting_bench') {
-        this.island.placeCraftingBench(dropX, dropZ, this.buildRotationAngle);
+        this.island.placeCraftingBench(dropX, dropZ, placementAngle);
         if (this.networkManager) {
-          this.networkManager.sendBlockPlaced(dropX, dropZ, this.buildRotationAngle, 'crafting_bench');
+          this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'crafting_bench');
         }
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_box') {
-        this.island.placeWoodBox(dropX, dropZ, this.buildRotationAngle);
+        this.island.placeWoodBox(dropX, dropZ, placementAngle);
         if (this.networkManager) {
-          this.networkManager.sendBlockPlaced(dropX, dropZ, this.buildRotationAngle, 'wood_box');
+          this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_box');
         }
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_wall') {
-        this.island.placeWoodWall(dropX, dropZ, this.buildRotationAngle);
+        this.island.placeWoodWall(dropX, dropZ, placementAngle);
         if (this.networkManager) {
-          this.networkManager.sendBlockPlaced(dropX, dropZ, this.buildRotationAngle, 'wood_wall');
+          this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall');
         }
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_wall_window') {
-        this.island.placeWoodWallWindow(dropX, dropZ, this.buildRotationAngle);
+        this.island.placeWoodWallWindow(dropX, dropZ, placementAngle);
         if (this.networkManager) {
-          this.networkManager.sendBlockPlaced(dropX, dropZ, this.buildRotationAngle, 'wood_wall_window');
+          this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall_window');
         }
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_wall_door') {
-        this.island.placeWoodWallDoor(dropX, dropZ, this.buildRotationAngle);
+        this.island.placeWoodWallDoor(dropX, dropZ, placementAngle);
         if (this.networkManager) {
-          this.networkManager.sendBlockPlaced(dropX, dropZ, this.buildRotationAngle, 'wood_wall_door');
+          this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall_door');
         }
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_floor') {
-        this.island.placeWoodFloor(dropX, dropZ, this.buildRotationAngle);
+        this.island.placeWoodFloor(dropX, dropZ, placementAngle);
         if (this.networkManager) {
-          this.networkManager.sendBlockPlaced(dropX, dropZ, this.buildRotationAngle, 'wood_floor');
+          this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_floor');
         }
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_roof') {
-        this.island.placeWoodRoof(dropX, dropZ, this.buildRotationAngle);
+        this.island.placeWoodRoof(dropX, dropZ, placementAngle);
         if (this.networkManager) {
-          this.networkManager.sendBlockPlaced(dropX, dropZ, this.buildRotationAngle, 'wood_roof');
+          this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_roof');
         }
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'log') {
@@ -609,7 +611,7 @@ class GameApp {
           const gy = this.island.getTerrainHeight(px, pz);
 
           this.buildPreviewMesh.visible = true;
-          this.buildPreviewMesh.rotation.y = this.buildRotationAngle;
+          this.buildPreviewMesh.rotation.y = (this.avatar.rotation + this.buildRotationAngle);
 
           if (activeItem.type === 'crafting_bench') {
             this.buildPreviewMesh.scale.set(1.6, 0.9, 0.9);

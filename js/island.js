@@ -932,10 +932,14 @@ export class SkyIsland {
     doorPanel.receiveShadow = true;
     doorHinge.add(doorPanel);
 
-    // Door Handle Brass Knob
-    const handleKnob = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), handleMat);
-    handleKnob.position.set(0.95, 0, 0.06);
-    doorHinge.add(handleKnob);
+    // Door Handle Brass Knobs (Front & Back)
+    const handleKnobFront = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), handleMat);
+    handleKnobFront.position.set(0.95, 0, 0.06);
+    doorHinge.add(handleKnobFront);
+
+    const handleKnobBack = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), handleMat);
+    handleKnobBack.position.set(0.95, 0, -0.06);
+    doorHinge.add(handleKnobBack);
 
     wallGroup.add(doorHinge);
 
