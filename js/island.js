@@ -602,8 +602,10 @@ export class SkyIsland {
    * Width = 1.6m (larger rectangular tabletop), Height = 0.9m (1/2 player height), 15 HP, Blueprint Paper on Top.
    */
   placeCraftingBench(x, z, rotationAngle = 0) {
-    const y = this.getTerrainHeight(x, z);
-    if (y < -1.0) return false;
+    if (!this.isConnectedToBuildOrGround(x, z)) return false;
+    const terrainY = this.getTerrainHeight(x, z);
+    const nearest = this.getNearestStructureAt(x, z);
+    const y = terrainY >= -1.0 ? terrainY : (nearest ? nearest.y : 0);
 
     const tableId = `bench_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`;
     const benchGroup = new THREE.Group();
@@ -790,9 +792,10 @@ export class SkyIsland {
    * Uses tight 0.15m colliders along wall centerline so players can walk right up to touch the wall surface.
    */
   placeWoodWall(x, z, rotationAngle = 0, customY = null) {
+    if (!this.isConnectedToBuildOrGround(x, z)) return false;
     const terrainY = this.getTerrainHeight(x, z);
-    if (terrainY < -1.0) return false;
-    const y = customY !== null ? customY : terrainY;
+    const nearest = this.getNearestStructureAt(x, z);
+    const y = customY !== null ? customY : (terrainY >= -1.0 ? terrainY : (nearest ? nearest.y : 0));
 
     const wallGroup = new THREE.Group();
     wallGroup.position.set(x, y + 1.35, z); // Vertical center at 1.35m
@@ -835,9 +838,10 @@ export class SkyIsland {
    * Open window allows full 100% clear sight through the window hole to the outside world!
    */
   placeWoodWallWindow(x, z, rotationAngle = 0, customY = null) {
+    if (!this.isConnectedToBuildOrGround(x, z)) return false;
     const terrainY = this.getTerrainHeight(x, z);
-    if (terrainY < -1.0) return false;
-    const y = customY !== null ? customY : terrainY;
+    const nearest = this.getNearestStructureAt(x, z);
+    const y = customY !== null ? customY : (terrainY >= -1.0 ? terrainY : (nearest ? nearest.y : 0));
 
     const wallGroup = new THREE.Group();
     wallGroup.position.set(x, y + 1.35, z);
@@ -957,9 +961,10 @@ export class SkyIsland {
    * Costs 4 Wood Logs. Door opens and closes on right click!
    */
   placeWoodWallDoor(x, z, rotationAngle = 0, customY = null) {
+    if (!this.isConnectedToBuildOrGround(x, z)) return false;
     const terrainY = this.getTerrainHeight(x, z);
-    if (terrainY < -1.0) return false;
-    const y = customY !== null ? customY : terrainY;
+    const nearest = this.getNearestStructureAt(x, z);
+    const y = customY !== null ? customY : (terrainY >= -1.0 ? terrainY : (nearest ? nearest.y : 0));
 
     const wallGroup = new THREE.Group();
     wallGroup.position.set(x, y + 1.35, z);
@@ -1275,12 +1280,45 @@ export class SkyIsland {
   }
 
   /**
+   * Checks if placement at (x, z) is grounded on island terrain OR connected to an existing structure.
+   * Prevents floating mid-air structures over the void while allowing expansion beyond island edges.
+   */
+  isConnectedToBuildOrGround(x, z, searchRadius = 3.2) {
+    const terrainY = this.getTerrainHeight(x, z);
+    if (terrainY >= -1.0) return true;
+
+    if (this.placedStructures && this.placedStructures.length > 0) {
+      if (this.placedStructures.some(s => Math.hypot(s.x - x, s.z - z) <= searchRadius)) return true;
+    }
+    if (this.placedCraftingTables && this.placedCraftingTables.length > 0) {
+      if (this.placedCraftingTables.some(t => Math.hypot(t.x - x, t.z - z) <= searchRadius)) return true;
+    }
+
+    return false;
+  }
+
+  getNearestStructureAt(x, z, searchRadius = 3.2) {
+    let nearest = null;
+    let minDist = searchRadius;
+    for (let i = 0; i < this.placedStructures.length; i++) {
+      const s = this.placedStructures[i];
+      const dist = Math.hypot(s.x - x, s.z - z);
+      if (dist <= minDist) {
+        minDist = dist;
+        nearest = s;
+      }
+    }
+    return nearest;
+  }
+
+  /**
    * Places a 3D Wood Floor Structure (2.7m x 2.7m flat ground panel = 1.5x player height)
    */
   placeWoodFloor(x, z, rotationAngle = 0, customY = null) {
+    if (!this.isConnectedToBuildOrGround(x, z)) return false;
     const terrainY = this.getTerrainHeight(x, z);
-    if (terrainY < -1.0) return false;
-    const y = customY !== null ? customY : terrainY;
+    const nearest = this.getNearestStructureAt(x, z);
+    const y = customY !== null ? customY : (terrainY >= -1.0 ? terrainY : (nearest ? nearest.y : 0));
 
     const floorGroup = new THREE.Group();
     floorGroup.position.set(x, y + 0.06, z);
@@ -1303,12 +1341,13 @@ export class SkyIsland {
    * Places a 3D Wood Roof Structure (2.7m x 2.7m top ceiling panel on top of walls at height y + 2.7m)
    */
   placeWoodRoof(x, z, rotationAngle = 0, customY = null) {
+    if (!this.isConnectedToBuildOrGround(x, z)) return false;
     const terrainY = this.getTerrainHeight(x, z);
-    if (terrainY < -1.0) return false;
-    const y = customY !== null ? (customY - 2.70) : terrainY;
+    const nearest = this.getHighestStructureAt(x, z);
+    const y = customY !== null ? customY : (nearest ? nearest.y + 2.70 : terrainY + 2.70);
 
     const roofGroup = new THREE.Group();
-    roofGroup.position.set(x, y + 2.70, z);
+    roofGroup.position.set(x, y, z);
     roofGroup.rotation.y = rotationAngle;
 
     const roofGeo = new THREE.BoxGeometry(2.70, 0.14, 2.70);
@@ -1329,10 +1368,11 @@ export class SkyIsland {
    * 30 HP, 6 hand-punch hits to break, drops 1 Wood Log on break.
    */
   placeWoodStairs(x, z, rotationAngle = 0, customY = null) {
+    if (!this.isConnectedToBuildOrGround(x, z)) return false;
     const terrainY = this.getTerrainHeight(x, z);
-    if (terrainY < -1.0) return false;
+    const nearest = this.getNearestStructureAt(x, z);
 
-    let y = customY !== null ? customY : terrainY;
+    let y = customY !== null ? customY : (terrainY >= -1.0 ? terrainY : (nearest ? nearest.y : 0));
     if (customY === null) {
       const existing = this.getHighestStructureAt(x, z);
       if (existing) {
@@ -1429,8 +1469,10 @@ export class SkyIsland {
    * matching the reference image from all viewing angles.
    */
   placeWoodBox(x, z, rotationAngle = 0, initialStorage = null) {
-    const y = this.getTerrainHeight(x, z);
-    if (y < -1.0) return false;
+    if (!this.isConnectedToBuildOrGround(x, z)) return false;
+    const terrainY = this.getTerrainHeight(x, z);
+    const nearest = this.getNearestStructureAt(x, z);
+    const y = terrainY >= -1.0 ? terrainY : (nearest ? nearest.y : 0);
 
     const boxGroup = new THREE.Group();
     boxGroup.position.set(x, y, z);

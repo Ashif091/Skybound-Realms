@@ -430,6 +430,9 @@ class GameApp {
         groundY = snap.y;
       }
 
+      const nearStruct = this.island ? this.island.getHighestStructureAt(dropX, dropZ, 1.8) : null;
+      const targetStruct = structure || nearStruct;
+
       if (activeItem.type === 'crafting_bench') {
         this.island.placeCraftingBench(dropX, dropZ, placementAngle);
         if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'crafting_bench', groundY);
@@ -455,8 +458,9 @@ class GameApp {
         if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_floor', groundY);
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_roof') {
-        this.island.placeWoodRoof(dropX, dropZ, placementAngle, groundY);
-        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_roof', groundY);
+        const roofY = targetStruct ? (targetStruct.y + 2.70) : (groundY + 2.70);
+        this.island.placeWoodRoof(dropX, dropZ, placementAngle, roofY);
+        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_roof', roofY);
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_stairs') {
         this.island.placeWoodStairs(dropX, dropZ, placementAngle, groundY);
@@ -700,6 +704,9 @@ class GameApp {
             gy = snap.y;
           }
 
+          const nearStruct = this.island ? this.island.getHighestStructureAt(px, pz, 1.8) : null;
+          const targetStruct = structure || nearStruct;
+
           this.buildPreviewMesh.visible = true;
           this.buildPreviewMesh.rotation.y = placementAngle;
 
@@ -716,8 +723,9 @@ class GameApp {
             this.buildPreviewMesh.scale.set(2.7, 0.12, 2.7);
             this.buildPreviewMesh.position.set(px, gy + 0.06, pz);
           } else if (activeItem.type === 'wood_roof') {
+            const roofY = targetStruct ? (targetStruct.y + 2.70) : (gy + 2.70);
             this.buildPreviewMesh.scale.set(2.7, 0.14, 2.7);
-            this.buildPreviewMesh.position.set(px, gy + 2.7, pz);
+            this.buildPreviewMesh.position.set(px, roofY, pz);
           } else if (activeItem.type === 'wood_stairs') {
             this.buildPreviewMesh.scale.set(2.7, 2.7, 2.7);
             this.buildPreviewMesh.position.set(px, gy + 1.35, pz);
