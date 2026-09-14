@@ -980,20 +980,38 @@ export class SkyIsland {
   }
 
   /**
-   * Toggles nearest door or window open/close within range of (avX, avZ)
+   * Toggles nearest door or window open/close within range of (avX, avZ).
+   * Enforces distance, height layer, facing direction, and placement precedence.
    */
-  toggleDoorOrWindowNear(avX, avZ) {
+  toggleDoorOrWindowNear(avX, avZ, avY = 0, avRot = 0, cameraPitch = 0, hasPlaceableItem = false) {
     let nearest = null;
-    let minDist = 3.2;
+    let minDist = hasPlaceableItem ? 1.7 : 2.5; // Tighter range when holding a buildable item
+
+    // Facing direction vector of avatar (sin(rot), cos(rot))
+    const dirX = Math.sin(avRot);
+    const dirZ = Math.cos(avRot);
 
     for (let i = 0; i < this.placedStructures.length; i++) {
       const s = this.placedStructures[i];
       if (s.type === 'wood_wall_door' || s.type === 'wood_wall_window') {
-        const dist = Math.hypot(avX - s.x, avZ - s.z);
-        if (dist < minDist) {
-          minDist = dist;
-          nearest = s;
+        const dx = s.x - avX;
+        const dz = s.z - avZ;
+        const dist = Math.hypot(dx, dz);
+        if (dist >= minDist) continue;
+
+        // Facing check: avatar must be facing TOWARDS the window/door
+        const dot = (dirX * dx + dirZ * dz) / (dist || 1);
+        if (dot < 0.35) continue; // Not facing towards structure (must be within ~65 deg angle)
+
+        if (s.type === 'wood_wall_window') {
+          // Height/Layer check: User must be looking/standing near window height (y + 0.85m to y + 1.85m)
+          const eyeY = avY + 1.62;
+          const windowCenterY = s.y + 1.35;
+          if (Math.abs(eyeY - windowCenterY) > 1.2) continue; // Too high or too low relative to window cutout
         }
+
+        minDist = dist;
+        nearest = s;
       }
     }
 

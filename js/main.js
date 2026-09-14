@@ -363,10 +363,16 @@ class GameApp {
 
     const avX = this.avatar.position.x;
     const avZ = this.avatar.position.z;
+    const avY = this.avatar.position.y;
+    const avRot = this.avatar.rotation;
+
+    const activeItem = this.inventory ? this.inventory.getActiveItem() : null;
+    const placeableTypes = ['crafting_bench', 'wood_box', 'wood_wall', 'wood_wall_window', 'wood_wall_door', 'wood_floor', 'wood_roof'];
+    const hasPlaceableItem = activeItem && activeItem.count > 0 && placeableTypes.includes(activeItem.type);
 
     // 1. If near placed Wooden Storage Box (within 1.8m), open 6-Slot Storage Box UI Modal
     const nearBox = this.island.getNearWoodBox(avX, avZ);
-    if (nearBox) {
+    if (nearBox && !hasPlaceableItem) {
       if (this.inventory) {
         this.inventory.openStorageBoxModal(nearBox);
       }
@@ -375,7 +381,7 @@ class GameApp {
 
     // 2. If near placed Crafting Table (within 1.5m), open Dedicated Crafting Window
     const nearBench = this.island.getNearCraftingBench(avX, avZ);
-    if (nearBench) {
+    if (nearBench && !hasPlaceableItem) {
       if (this.inventory) {
         this.inventory.openCraftingTableModal();
       }
@@ -383,7 +389,8 @@ class GameApp {
     }
 
     // 3. If near placed Doorway Wall or Window Wall, open/close door or window shutters on right-click
-    const doorRes = this.island.toggleDoorOrWindowNear(avX, avZ);
+    const cameraPitch = this.controls ? this.controls.cameraPitch : 0.25;
+    const doorRes = this.island.toggleDoorOrWindowNear(avX, avZ, avY, avRot, cameraPitch, hasPlaceableItem);
     if (doorRes) {
       if (this.inventory) {
         const actionName = doorRes.type === 'wood_wall_door' ? 'Door' : 'Window Shutter';
@@ -394,7 +401,6 @@ class GameApp {
     }
 
     // 4. Otherwise place active building structure / crafting table on ground
-    const activeItem = this.inventory.getActiveItem();
     if (activeItem && activeItem.count > 0) {
       const dropX = this.avatar.position.x + Math.sin(this.avatar.rotation) * 1.6;
       const dropZ = this.avatar.position.z + Math.cos(this.avatar.rotation) * 1.6;
