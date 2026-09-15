@@ -752,7 +752,7 @@ class GameApp {
 
     // 3. Floating Log Drops Animation & Avatar Proximity Pickup
     if (this.avatar) {
-      this.itemDropManager.update(deltaTime, this.avatar.position, this.inventory, this.networkManager);
+      this.itemDropManager.update(deltaTime, this.avatar.position, this.inventory, this.networkManager, this.island);
 
       // 4. Terrain Height Check for Avatar Physics
       const terrainY = this.island.getTerrainHeight(this.avatar.position.x, this.avatar.position.z);

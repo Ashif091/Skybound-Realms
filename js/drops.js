@@ -124,7 +124,8 @@ export class ItemDropManager {
       group: group,
       x: x,
       z: z,
-      baseY: startY,
+      currentY: startY,
+      vy: 0,
       floatTime: Math.random() * Math.PI * 2,
       count: count,
       itemType: itemType,
@@ -157,29 +158,70 @@ export class ItemDropManager {
   }
 
   /**
-   * Updates floating log rotation and proximity pickup by player avatar
+   * Updates floating log rotation, gravity falling onto ground/rigid surfaces, and proximity pickup by player avatar
    */
-  update(deltaTime, avatarPos, inventory, networkManager = null) {
+  update(deltaTime, avatarPos, inventory, networkManager = null, island = null) {
     for (let i = this.drops.length - 1; i >= 0; i--) {
       const drop = this.drops[i];
-      
-      // Floating & Rotation Animation
+
+      // 1. Calculate ground / rigid surface height beneath drop (x, z)
+      let terrainY = 0;
+      if (island && typeof island.getTerrainHeight === 'function') {
+        terrainY = island.getTerrainHeight(drop.x, drop.z);
+      }
+
+      let rigidY = terrainY;
+      if (island && typeof island.getStructureHeightAndCeiling === 'function') {
+        const curY = drop.currentY !== undefined ? drop.currentY : (drop.baseY || terrainY);
+        const structPhysics = island.getStructureHeightAndCeiling(drop.x, drop.z, curY);
+        if (structPhysics && structPhysics.groundY > -40) {
+          rigidY = Math.max(rigidY, structPhysics.groundY);
+        }
+      }
+
+      // Rest elevation: 0.05m (1/20m subtle hover gap above ground or rigid structure surface)
+      const restY = rigidY + 0.05;
+
+      // Initialize height & vertical velocity
+      if (drop.currentY === undefined) {
+        drop.currentY = drop.baseY || restY;
+      }
+      if (drop.vy === undefined) {
+        drop.vy = 0;
+      }
+
+      // 2. Physics Gravity & Falling onto Rigid Surface / Ground
+      if (drop.currentY > restY + 0.005) {
+        drop.vy -= 14.0 * deltaTime; // Gravity acceleration
+        drop.currentY += drop.vy * deltaTime;
+        if (drop.currentY <= restY) {
+          drop.currentY = restY;
+          drop.vy = 0;
+        }
+      } else if (drop.currentY < restY - 0.05) {
+        // If underlying structure was removed or ground height shifted, update currentY to restY
+        drop.currentY = restY;
+        drop.vy = 0;
+      } else {
+        drop.currentY = restY;
+        drop.vy = 0;
+      }
+
+      // 3. Subtle floating & spinning animation
       drop.floatTime += deltaTime * 3.0;
-      drop.group.position.y = drop.baseY + Math.sin(drop.floatTime) * 0.12;
+      const bobbing = Math.sin(drop.floatTime) * 0.035; // Gentle 0.035m vertical bobbing
+      drop.group.position.set(drop.x, drop.currentY + bobbing, drop.z);
       drop.group.rotation.y += deltaTime * 1.8;
 
-      // Physical Body / Leg Touch Check (Avatar radius 0.45m + Log radius 0.20m = 0.65m)
+      // 4. Physical Body / Leg Touch Check for player pickup
       const dist = Math.hypot(avatarPos.x - drop.x, avatarPos.z - drop.z);
-      const dy = Math.abs(avatarPos.y - (drop.baseY - 0.2)); // Leg/feet level match
-      
-      // Pickup condition: Avatar body or legs physically touch the ground log (dist <= 0.65m)
-      if (dist <= 0.65 && dy < 1.1 && !drop.pendingPickup) {
+      const dy = Math.abs(avatarPos.y - drop.currentY);
+
+      if (dist <= 0.70 && dy < 1.2 && !drop.pendingPickup) {
         if (networkManager && networkManager.ws && networkManager.ws.readyState === WebSocket.OPEN) {
-          // Request pickup from server to ensure first-come-first-served synchronized collection
           drop.pendingPickup = true;
           networkManager.sendPickupDrop(drop.dropId);
         } else {
-          // Offline fallback
           const added = inventory.addItem(drop.itemType || 'log', drop.count);
           if (added) {
             this.scene.remove(drop.group);
