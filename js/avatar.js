@@ -326,8 +326,18 @@ export class Avatar {
     if (Math.abs(this.velocity.x) < 0.01) this.velocity.x = 0;
     if (Math.abs(this.velocity.z) < 0.01) this.velocity.z = 0;
 
-    // Tree Obstacle Collision Resolution
+    // Obstacle Collision Resolution (Shape-level 3D Rigid Body Pushout)
     treeColliders.forEach((tree) => {
+      // 3D Height Check: Only apply XZ pushout if avatar is vertically intersecting the obstacle body
+      if (tree.minY !== undefined && tree.maxY !== undefined) {
+        const avFeetY = this.position.y;
+        const avHeadY = this.position.y + 1.75;
+        // Skip horizontal pushout if avatar is above or below obstacle height bounds
+        if (avFeetY >= tree.maxY - 0.12 || avHeadY <= tree.minY) {
+          return;
+        }
+      }
+
       const dx = this.position.x - tree.x;
       const dz = this.position.z - tree.z;
       const dist = Math.hypot(dx, dz);

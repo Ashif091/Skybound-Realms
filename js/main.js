@@ -74,6 +74,44 @@ class GameApp {
     this.buildPreviewMesh.visible = false;
     this.scene.add(this.buildPreviewMesh);
 
+    // Dedicated Stair Wireframe Preview Geometry matching actual 3D stair ramp & step profile (2.7m x 2.7m x 2.7m)
+    const stairPoints = [];
+    const sw = 1.35; // half width
+    const sh = 2.70; // total height
+    const sd = 1.35; // half depth
+
+    // Left side profile
+    stairPoints.push(new THREE.Vector3(-sw, 0, -sd), new THREE.Vector3(-sw, 0, sd));
+    stairPoints.push(new THREE.Vector3(-sw, 0, sd), new THREE.Vector3(-sw, sh, sd));
+    stairPoints.push(new THREE.Vector3(-sw, sh, sd), new THREE.Vector3(-sw, 0, -sd));
+
+    // Right side profile
+    stairPoints.push(new THREE.Vector3(sw, 0, -sd), new THREE.Vector3(sw, 0, sd));
+    stairPoints.push(new THREE.Vector3(sw, 0, sd), new THREE.Vector3(sw, sh, sd));
+    stairPoints.push(new THREE.Vector3(sw, sh, sd), new THREE.Vector3(sw, 0, -sd));
+
+    // Cross beams
+    stairPoints.push(new THREE.Vector3(-sw, 0, -sd), new THREE.Vector3(sw, 0, -sd));
+    stairPoints.push(new THREE.Vector3(-sw, 0, sd), new THREE.Vector3(sw, 0, sd));
+    stairPoints.push(new THREE.Vector3(-sw, sh, sd), new THREE.Vector3(sw, sh, sd));
+
+    // 4 Step Rung Lines
+    const numSteps = 4;
+    for (let i = 1; i < numSteps; i++) {
+      const t = i / numSteps;
+      const pZ = -sd + t * (sd * 2);
+      const pY = t * sh;
+      stairPoints.push(new THREE.Vector3(-sw, pY, pZ), new THREE.Vector3(sw, pY, pZ));
+      stairPoints.push(new THREE.Vector3(-sw, pY, pZ), new THREE.Vector3(-sw, 0, pZ));
+      stairPoints.push(new THREE.Vector3(sw, pY, pZ), new THREE.Vector3(sw, 0, pZ));
+    }
+
+    const stairGeo = new THREE.BufferGeometry().setFromPoints(stairPoints);
+    this.stairPreviewMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
+    this.stairPreviewMesh = new THREE.LineSegments(stairGeo, this.stairPreviewMat);
+    this.stairPreviewMesh.visible = false;
+    this.scene.add(this.stairPreviewMesh);
+
     // Player identity — populated after auth
     this.selectedColors = getRandomAvatarColors(); // temporary until auth
     this.playerName = 'Player';
@@ -300,7 +338,42 @@ class GameApp {
       this.networkManager.sendPunch();
     }
 
-    // 1. Check hitting Crafting Bench nearby -> Drops crafting_bench on break!
+    // 1. Raycast crosshair target to check if aiming directly at a specific structure/object within reach
+    const { hit, structure } = this.getCrosshairTarget(5.0);
+    if (structure) {
+      const structRes = this.island.damageSpecificStructure(structure);
+      if (structRes) {
+        this.triggerScreenShake(0.2, 0.12);
+        if (structRes.broken) {
+          if (structRes.itemsToDrop && Array.isArray(structRes.itemsToDrop)) {
+            structRes.itemsToDrop.forEach(dropItem => {
+              const dropId = this.itemDropManager.spawnLogDrop(
+                structRes.x + (Math.random() - 0.5) * 0.4,
+                structRes.z + (Math.random() - 0.5) * 0.4,
+                structRes.y,
+                dropItem.count,
+                null,
+                dropItem.type
+              );
+              if (this.networkManager) {
+                this.networkManager.sendDropLog(dropId, structRes.x, structRes.z, structRes.y, dropItem.count, dropItem.type);
+              }
+            });
+          } else {
+            const dropId = this.itemDropManager.spawnLogDrop(structRes.x, structRes.z, structRes.y, 1, null, structRes.itemType || 'log');
+            if (this.networkManager) {
+              this.networkManager.sendDropLog(dropId, structRes.x, structRes.z, structRes.y, 1, structRes.itemType || 'log');
+            }
+          }
+          if (this.networkManager) {
+            this.networkManager.sendBlockBroken(structRes.x, structRes.z, structRes.structType || structRes.itemType || 'wood_wall', structRes.y);
+          }
+        }
+        return;
+      }
+    }
+
+    // 2. Fallback: Check hitting Crafting Bench nearby -> Drops crafting_bench on break!
     const benchRes = this.island.punchCraftingBenchNear(avX, avZ, facingAngle);
     if (benchRes) {
       this.triggerScreenShake(0.2, 0.12);
@@ -308,13 +381,13 @@ class GameApp {
         const dropId = this.itemDropManager.spawnLogDrop(benchRes.x, benchRes.z, benchRes.y, 1, null, 'crafting_bench');
         if (this.networkManager) {
           this.networkManager.sendDropLog(dropId, benchRes.x, benchRes.z, benchRes.y, 1, 'crafting_bench');
-          this.networkManager.sendBlockBroken(benchRes.x, benchRes.z, 'crafting_bench');
+          this.networkManager.sendBlockBroken(benchRes.x, benchRes.z, 'crafting_bench', benchRes.y);
         }
       }
       return;
     }
 
-    // 2. Check hitting Building Structure nearby (Wall, Floor, Roof, Wood Box) -> Drops item(s) on break!
+    // 3. Fallback: Check hitting Building Structure nearby
     const structRes = this.island.punchStructureNear(avX, avZ, facingAngle);
     if (structRes) {
       this.triggerScreenShake(0.2, 0.12);
@@ -340,7 +413,7 @@ class GameApp {
           }
         }
         if (this.networkManager) {
-          this.networkManager.sendBlockBroken(structRes.x, structRes.z, structRes.structType || structRes.type || structRes.itemType || 'wood_box', structRes.y);
+          this.networkManager.sendBlockBroken(structRes.x, structRes.z, structRes.structType || structRes.itemType || 'wood_wall', structRes.y);
         }
       }
       return;
@@ -396,6 +469,45 @@ class GameApp {
   }
 
   /**
+   * Calculates placement base Y level based on crosshair hit point, structure tops beneath target, or player elevation level.
+   */
+  getPlacementBaseY(px, pz, avatarY, hitPoint = null, structure = null) {
+    const terrainY = this.island ? this.island.getTerrainHeight(px, pz) : 0;
+
+    // 1. Raycast hit a structure face directly
+    if (hitPoint) {
+      return Math.max(terrainY, hitPoint.y);
+    }
+
+    // 2. Rigid structure top surface height at (px, pz) near avatar level
+    const structPhysics = this.island ? this.island.getStructureHeightAndCeiling(px, pz, avatarY) : null;
+    if (structPhysics && structPhysics.groundY > -40) {
+      return Math.max(terrainY, structPhysics.groundY);
+    }
+
+    // 3. Nearest structure top near (px, pz)
+    const nearStruct = this.island ? this.island.getHighestStructureAt(px, pz, 2.5) : null;
+    if (nearStruct) {
+      if (Math.abs(avatarY - (nearStruct.y + 2.70)) <= 1.8) {
+        return nearStruct.y + 2.70;
+      }
+      if (Math.abs(avatarY - nearStruct.y) <= 1.8) {
+        return nearStruct.y;
+      }
+    }
+
+    // 4. Elevated Player standing level (standing on roof/floor)
+    if (avatarY > terrainY + 0.8) {
+      if (this.island && this.island.isValidBuildPosition(px, avatarY, pz)) {
+        return avatarY;
+      }
+    }
+
+    // 5. Default to ground level
+    return terrainY;
+  }
+
+  /**
    * Called on Right Mouse Click -> Open Crafting Table UI or Place Structure / Drop Item
    */
   onPlaceRightClick() {
@@ -414,57 +526,65 @@ class GameApp {
       const { hit, structure } = this.getCrosshairTarget(6.0);
       let dropX = avX + Math.sin(avRot) * 1.6;
       let dropZ = avZ + Math.cos(avRot) * 1.6;
-      let groundY = this.island.getTerrainHeight(dropX, dropZ);
       if (hit && hit.point) {
         dropX = hit.point.x;
         dropZ = hit.point.z;
-        groundY = structure ? Math.max(this.island.getTerrainHeight(dropX, dropZ), hit.point.y) : this.island.getTerrainHeight(dropX, dropZ);
       }
+      const groundY = this.getPlacementBaseY(dropX, dropZ, this.avatar.position.y, hit ? hit.point : null, structure);
       const placementAngle = (this.avatar.rotation + this.buildRotationAngle) % (Math.PI * 2);
-
-      // Smart Edge & Grid Snapping
-      const snap = this.island.getSnappedBuildPosition(dropX, dropZ, activeItem.type, placementAngle);
-      if (snap.snapped) {
-        dropX = snap.x;
-        dropZ = snap.z;
-        groundY = snap.y;
-      }
 
       const nearStruct = this.island ? this.island.getHighestStructureAt(dropX, dropZ, 1.8) : null;
       const targetStruct = structure || nearStruct;
+      let checkY = groundY;
+      if (activeItem.type === 'wood_roof') {
+        if (targetStruct) {
+          checkY = (targetStruct.type === 'wood_wall' || targetStruct.type === 'wood_wall_window' || targetStruct.type === 'wood_wall_door')
+                   ? targetStruct.y + 2.70 : targetStruct.y;
+        } else if (groundY <= (this.island ? this.island.getTerrainHeight(dropX, dropZ) : 0) + 0.5) {
+          checkY = groundY + 2.70;
+        }
+      }
+
+      // Validate object placement: Must connect to ground or touch an existing rigid structure
+      const isValid = this.island ? this.island.isValidBuildPosition(dropX, checkY, dropZ, activeItem.type) : true;
+      if (!isValid) {
+        if (this.inventory && this.inventory.showToast) {
+          this.inventory.showToast('Cannot place: Must connect to ground or touch an existing structure!');
+        }
+        return;
+      }
 
       if (activeItem.type === 'crafting_bench') {
-        this.island.placeCraftingBench(dropX, dropZ, placementAngle);
-        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'crafting_bench', groundY);
+        this.island.placeCraftingBench(dropX, dropZ, placementAngle, checkY);
+        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'crafting_bench', checkY);
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_box') {
-        this.island.placeWoodBox(dropX, dropZ, placementAngle);
-        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_box', groundY);
+        this.island.placeWoodBox(dropX, dropZ, placementAngle, null, checkY);
+        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_box', checkY);
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_wall') {
-        this.island.placeWoodWall(dropX, dropZ, placementAngle, groundY);
-        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall', groundY);
+        this.island.placeWoodWall(dropX, dropZ, placementAngle, checkY);
+        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall', checkY);
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_wall_window') {
-        this.island.placeWoodWallWindow(dropX, dropZ, placementAngle, groundY);
-        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall_window', groundY);
+        this.island.placeWoodWallWindow(dropX, dropZ, placementAngle, checkY);
+        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall_window', checkY);
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_wall_door') {
-        this.island.placeWoodWallDoor(dropX, dropZ, placementAngle, groundY);
-        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall_door', groundY);
+        this.island.placeWoodWallDoor(dropX, dropZ, placementAngle, checkY);
+        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall_door', checkY);
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_floor') {
-        this.island.placeWoodFloor(dropX, dropZ, placementAngle, groundY);
-        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_floor', groundY);
+        this.island.placeWoodFloor(dropX, dropZ, placementAngle, checkY);
+        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_floor', checkY);
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_roof') {
-        const roofY = targetStruct ? (targetStruct.y + 2.70) : (groundY + 2.70);
-        this.island.placeWoodRoof(dropX, dropZ, placementAngle, roofY);
-        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_roof', roofY);
+        this.island.placeWoodRoof(dropX, dropZ, placementAngle, checkY);
+        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_roof', checkY);
         this.inventory.useActiveItem();
       } else if (activeItem.type === 'wood_stairs') {
-        this.island.placeWoodStairs(dropX, dropZ, placementAngle, groundY);
-        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_stairs', groundY);
+        this.island.placeWoodStairs(dropX, dropZ, placementAngle, checkY);
+        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_stairs', checkY);
         this.inventory.useActiveItem();
       }
       if (this.networkManager && this.inventory) {
@@ -687,54 +807,70 @@ class GameApp {
           const rot = this.avatar.rotation;
           let px = this.avatar.position.x + Math.sin(rot) * 1.6;
           let pz = this.avatar.position.z + Math.cos(rot) * 1.6;
-          let gy = this.island.getTerrainHeight(px, pz);
 
           const { hit, structure } = this.getCrosshairTarget(6.0);
           if (hit && hit.point) {
             px = hit.point.x;
             pz = hit.point.z;
-            gy = structure ? Math.max(this.island.getTerrainHeight(px, pz), hit.point.y) : this.island.getTerrainHeight(px, pz);
           }
 
+          const gy = this.getPlacementBaseY(px, pz, this.avatar.position.y, hit ? hit.point : null, structure);
           const placementAngle = (this.avatar.rotation + this.buildRotationAngle) % (Math.PI * 2);
-          const snap = this.island ? this.island.getSnappedBuildPosition(px, pz, activeItem.type, placementAngle) : null;
-          if (snap && snap.snapped) {
-            px = snap.x;
-            pz = snap.z;
-            gy = snap.y;
-          }
-
           const nearStruct = this.island ? this.island.getHighestStructureAt(px, pz, 1.8) : null;
           const targetStruct = structure || nearStruct;
 
-          this.buildPreviewMesh.visible = true;
-          this.buildPreviewMesh.rotation.y = placementAngle;
-
-          if (activeItem.type === 'crafting_bench') {
-            this.buildPreviewMesh.scale.set(1.6, 0.9, 0.9);
-            this.buildPreviewMesh.position.set(px, gy + 0.45, pz);
-          } else if (activeItem.type === 'wood_box') {
-            this.buildPreviewMesh.scale.set(0.85, 0.65, 0.85);
-            this.buildPreviewMesh.position.set(px, gy + 0.325, pz);
-          } else if (activeItem.type === 'wood_wall' || activeItem.type === 'wood_wall_window' || activeItem.type === 'wood_wall_door') {
-            this.buildPreviewMesh.scale.set(2.7, 2.7, 0.18);
-            this.buildPreviewMesh.position.set(px, gy + 1.35, pz);
-          } else if (activeItem.type === 'wood_floor') {
-            this.buildPreviewMesh.scale.set(2.7, 0.12, 2.7);
-            this.buildPreviewMesh.position.set(px, gy + 0.06, pz);
-          } else if (activeItem.type === 'wood_roof') {
-            const roofY = targetStruct ? (targetStruct.y + 2.70) : (gy + 2.70);
-            this.buildPreviewMesh.scale.set(2.7, 0.14, 2.7);
-            this.buildPreviewMesh.position.set(px, roofY, pz);
-          } else if (activeItem.type === 'wood_stairs') {
-            this.buildPreviewMesh.scale.set(2.7, 2.7, 2.7);
-            this.buildPreviewMesh.position.set(px, gy + 1.35, pz);
+          let checkY = gy;
+          if (activeItem.type === 'wood_roof') {
+            if (targetStruct) {
+              checkY = (targetStruct.type === 'wood_wall' || targetStruct.type === 'wood_wall_window' || targetStruct.type === 'wood_wall_door')
+                       ? targetStruct.y + 2.70 : targetStruct.y;
+            } else if (gy <= (this.island ? this.island.getTerrainHeight(px, pz) : 0) + 0.5) {
+              checkY = gy + 2.70;
+            }
           }
-        } else if (this.buildPreviewMesh) {
-          this.buildPreviewMesh.visible = false;
+
+          const isValid = this.island ? this.island.isValidBuildPosition(px, checkY, pz, activeItem.type) : true;
+
+          if (activeItem.type === 'wood_stairs') {
+            this.buildPreviewMesh.visible = false;
+            this.stairPreviewMesh.visible = true;
+            this.stairPreviewMesh.rotation.y = placementAngle;
+            this.stairPreviewMesh.position.set(px, checkY, pz);
+            if (this.stairPreviewMat) {
+              this.stairPreviewMat.color.setHex(isValid ? 0xffffff : 0xef4444);
+            }
+          } else {
+            this.stairPreviewMesh.visible = false;
+            this.buildPreviewMesh.visible = true;
+            this.buildPreviewMesh.rotation.y = placementAngle;
+            if (this.previewMat) {
+              this.previewMat.color.setHex(isValid ? 0xffffff : 0xef4444);
+            }
+
+            if (activeItem.type === 'crafting_bench') {
+              this.buildPreviewMesh.scale.set(1.6, 0.9, 0.9);
+              this.buildPreviewMesh.position.set(px, checkY + 0.45, pz);
+            } else if (activeItem.type === 'wood_box') {
+              this.buildPreviewMesh.scale.set(0.85, 0.65, 0.85);
+              this.buildPreviewMesh.position.set(px, checkY + 0.325, pz);
+            } else if (activeItem.type === 'wood_wall' || activeItem.type === 'wood_wall_window' || activeItem.type === 'wood_wall_door') {
+              this.buildPreviewMesh.scale.set(2.7, 2.7, 0.18);
+              this.buildPreviewMesh.position.set(px, checkY + 1.35, pz);
+            } else if (activeItem.type === 'wood_floor') {
+              this.buildPreviewMesh.scale.set(2.7, 0.12, 2.7);
+              this.buildPreviewMesh.position.set(px, checkY + 0.06, pz);
+            } else if (activeItem.type === 'wood_roof') {
+              this.buildPreviewMesh.scale.set(2.7, 0.14, 2.7);
+              this.buildPreviewMesh.position.set(px, checkY, pz);
+            }
+          }
+        } else {
+          if (this.buildPreviewMesh) this.buildPreviewMesh.visible = false;
+          if (this.stairPreviewMesh) this.stairPreviewMesh.visible = false;
         }
-      } else if (this.buildPreviewMesh) {
-        this.buildPreviewMesh.visible = false;
+      } else {
+        if (this.buildPreviewMesh) this.buildPreviewMesh.visible = false;
+        if (this.stairPreviewMesh) this.stairPreviewMesh.visible = false;
       }
     }
 

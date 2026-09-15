@@ -71,7 +71,45 @@ function scheduleSaveWorld() {
   saveWorldTimer = setTimeout(() => saveWorldToDB(), 2000);
 }
 
+const WORLD_FILE = path.join(process.cwd(), 'data', 'world.json');
+
+function saveWorldToFile() {
+  try {
+    const dir = path.dirname(WORLD_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const data = {
+      trees: Array.from(worldState.trees.values()),
+      drops: Array.from(worldState.drops.values()),
+      placedBlocks: worldState.placedBlocks
+    };
+    fs.writeFileSync(WORLD_FILE, JSON.stringify(data, null, 2), 'utf8');
+  } catch (err) {
+    console.error('[FILE] Failed to save world file:', err.message);
+  }
+}
+
+function loadWorldFromFile() {
+  try {
+    if (!fs.existsSync(WORLD_FILE)) return;
+    const raw = fs.readFileSync(WORLD_FILE, 'utf8');
+    const data = JSON.parse(raw);
+    if (data.placedBlocks && Array.isArray(data.placedBlocks)) {
+      worldState.placedBlocks = data.placedBlocks;
+    }
+    if (data.trees && Array.isArray(data.trees)) {
+      data.trees.forEach(t => {
+        const key = `${Math.round(t.x * 10) / 10}_${Math.round(t.z * 10) / 10}`;
+        worldState.trees.set(key, t);
+      });
+    }
+    console.log(`[FILE] Loaded world fallback from data/world.json: ${worldState.placedBlocks.length} placed block(s).`);
+  } catch (err) {
+    console.error('[FILE] Failed to load world file:', err.message);
+  }
+}
+
 async function saveWorldToDB() {
+  saveWorldToFile(); // Always maintain file backup
   if (!dbWorld) return;
   try {
     await dbWorld.replaceOne(
@@ -108,7 +146,8 @@ async function saveInventoryToDB(email, slots, playerHp) {
 // ── MongoDB Connect & Seed world state ────────────────────────────────────
 async function connectMongo() {
   if (!MONGO_URI) {
-    console.warn('[MONGO] No MONGODB_URI set — running without database (data will not persist).');
+    console.warn('[MONGO] No MONGODB_URI set — running with local file persistence.');
+    loadWorldFromFile();
     return false;
   }
 
@@ -149,8 +188,8 @@ async function connectMongo() {
       const cleanedBlocks = [];
       (worldDoc.placedBlocks || []).forEach(b => {
         const dup = cleanedBlocks.some(existing =>
-          Math.hypot(existing.x - b.x, existing.z - b.z) < 0.4 &&
-          Math.abs((existing.y || 0) - (b.y || 0)) < 0.4 &&
+          Math.hypot(existing.x - b.x, existing.z - b.z) < 0.3 &&
+          Math.abs((existing.y || 0) - (b.y || 0)) < 0.3 &&
           existing.blockType === b.blockType
         );
         if (!dup) cleanedBlocks.push(b);
@@ -158,13 +197,15 @@ async function connectMongo() {
       worldState.placedBlocks = cleanedBlocks;
       console.log(`[MONGO] Loaded world: ${worldState.trees.size} trees, ${worldState.drops.size} drops, ${worldState.placedBlocks.length} placed block(s).`);
     } else {
-      console.log('[MONGO] No existing world document — starting fresh.');
+      console.log('[MONGO] No existing world document in DB — checking local file fallback.');
+      loadWorldFromFile();
     }
 
     return true;
   } catch (err) {
     console.error('[MONGO] Connection failed:', err.message);
-    console.warn('[MONGO] Server will run without persistence.');
+    console.warn('[MONGO] Server running with local file persistence.');
+    loadWorldFromFile();
     return false;
   }
 }
