@@ -447,32 +447,23 @@ async function startServer() {
         case 'blockBroken': {
           const targetType = data.blockType;
           let removedCount = 0;
-          for (let i = worldState.placedBlocks.length - 1; i >= 0; i--) {
-            const b = worldState.placedBlocks[i];
-            const dist = Math.hypot(b.x - data.x, b.z - data.z);
-            const distY = Math.abs((b.y || 0) - (data.y || 0));
-            if (dist < 1.85 && (data.y === undefined || distY < 1.85) && (!targetType || targetType === 'log' || b.blockType === targetType)) {
-              worldState.placedBlocks.splice(i, 1);
-              removedCount++;
-              break;
-            }
-          }
-          if (removedCount === 0) {
-            let minDist = 2.5;
-            let closestIdx = -1;
-            worldState.placedBlocks.forEach((b, i) => {
-              const dist = Math.hypot(b.x - data.x, b.z - data.z);
-              const distY = Math.abs((b.y || 0) - (data.y || 0));
-              if (dist < minDist && (data.y === undefined || distY < 2.5)) {
-                minDist = dist;
-                closestIdx = i;
+
+          // Only remove placed structures if a valid structure blockType was targeted (NOT tree or log hits)
+          if (targetType && targetType !== 'tree' && targetType !== 'log') {
+            for (let i = worldState.placedBlocks.length - 1; i >= 0; i--) {
+              const b = worldState.placedBlocks[i];
+              if (b.blockType === targetType) {
+                const distXZ = Math.hypot(b.x - data.x, b.z - data.z);
+                const distY = Math.abs((b.y || 0) - (data.y || 0));
+                if (distXZ < 1.5 && (data.y === undefined || distY < 1.5)) {
+                  worldState.placedBlocks.splice(i, 1);
+                  removedCount++;
+                  break;
+                }
               }
-            });
-            if (closestIdx !== -1) {
-              worldState.placedBlocks.splice(closestIdx, 1);
-              removedCount++;
             }
           }
+
           if (removedCount > 0) {
             await saveWorldToDB();
           }

@@ -602,7 +602,8 @@ export class SkyIsland {
    * Width = 1.6m (larger rectangular tabletop), Height = 0.9m (1/2 player height), 15 HP, Blueprint Paper on Top.
    */
   placeCraftingBench(x, z, rotationAngle = 0, customY = null, isSync = false) {
-    if (!isSync && !this.isConnectedToBuildOrGround(x, z)) return false;
+    const y = customY !== null ? customY : (this.getTerrainHeight(x, z) >= -1.0 ? this.getTerrainHeight(x, z) : 0);
+    if (!isSync && !this.isValidBuildPosition(x, y, z, 'crafting_bench')) return false;
     const terrainY = this.getTerrainHeight(x, z);
     const nearest = this.getNearestStructureAt(x, z);
     const y = customY !== null ? customY : (terrainY >= -1.0 ? terrainY : (nearest ? nearest.y : 0));
@@ -792,7 +793,8 @@ export class SkyIsland {
    * Uses tight 0.15m colliders along wall centerline so players can walk right up to touch the wall surface.
    */
   placeWoodWall(x, z, rotationAngle = 0, customY = null, isSync = false) {
-    if (!isSync && !this.isConnectedToBuildOrGround(x, z)) return false;
+    const y = customY !== null ? customY : (this.getTerrainHeight(x, z) >= -1.0 ? this.getTerrainHeight(x, z) : 0);
+    if (!isSync && !this.isValidBuildPosition(x, y, z, 'wood_wall')) return false;
     const terrainY = this.getTerrainHeight(x, z);
     const nearest = this.getNearestStructureAt(x, z);
     const y = customY !== null ? customY : (terrainY >= -1.0 ? terrainY : (nearest ? nearest.y : 0));
@@ -838,7 +840,8 @@ export class SkyIsland {
    * Open window allows full 100% clear sight through the window hole to the outside world!
    */
   placeWoodWallWindow(x, z, rotationAngle = 0, customY = null, isSync = false) {
-    if (!isSync && !this.isConnectedToBuildOrGround(x, z)) return false;
+    const y = customY !== null ? customY : (this.getTerrainHeight(x, z) >= -1.0 ? this.getTerrainHeight(x, z) : 0);
+    if (!isSync && !this.isValidBuildPosition(x, y, z, 'wood_wall_window')) return false;
     const terrainY = this.getTerrainHeight(x, z);
     const nearest = this.getNearestStructureAt(x, z);
     const y = customY !== null ? customY : (terrainY >= -1.0 ? terrainY : (nearest ? nearest.y : 0));
@@ -959,7 +962,8 @@ export class SkyIsland {
    * Costs 4 Wood Logs. Door opens and closes on right click!
    */
   placeWoodWallDoor(x, z, rotationAngle = 0, customY = null, isSync = false) {
-    if (!isSync && !this.isConnectedToBuildOrGround(x, z)) return false;
+    const y = customY !== null ? customY : (this.getTerrainHeight(x, z) >= -1.0 ? this.getTerrainHeight(x, z) : 0);
+    if (!isSync && !this.isValidBuildPosition(x, y, z, 'wood_wall_door')) return false;
     const terrainY = this.getTerrainHeight(x, z);
     const nearest = this.getNearestStructureAt(x, z);
     const y = customY !== null ? customY : (terrainY >= -1.0 ? terrainY : (nearest ? nearest.y : 0));
@@ -1314,7 +1318,8 @@ export class SkyIsland {
    * Places a 3D Wood Floor Structure (2.7m x 2.7m flat ground panel = 1.5x player height)
    */
   placeWoodFloor(x, z, rotationAngle = 0, customY = null, isSync = false) {
-    if (!isSync && !this.isConnectedToBuildOrGround(x, z)) return false;
+    const y = customY !== null ? customY : (this.getTerrainHeight(x, z) >= -1.0 ? this.getTerrainHeight(x, z) : 0);
+    if (!isSync && !this.isValidBuildPosition(x, y, z, 'wood_floor')) return false;
     const terrainY = this.getTerrainHeight(x, z);
     const nearest = this.getNearestStructureAt(x, z);
     const y = customY !== null ? customY : (terrainY >= -1.0 ? terrainY : (nearest ? nearest.y : 0));
@@ -1340,7 +1345,8 @@ export class SkyIsland {
    * Places a 3D Wood Roof Structure (2.7m x 2.7m top ceiling panel on top of walls at height y + 2.7m)
    */
   placeWoodRoof(x, z, rotationAngle = 0, customY = null, isSync = false) {
-    if (!isSync && !this.isConnectedToBuildOrGround(x, z)) return false;
+    const y = customY !== null ? customY : (this.getTerrainHeight(x, z) + 2.70);
+    if (!isSync && !this.isValidBuildPosition(x, y, z, 'wood_roof')) return false;
     const terrainY = this.getTerrainHeight(x, z);
     const nearest = this.getHighestStructureAt(x, z);
     const y = customY !== null ? customY : (nearest ? nearest.y + 2.70 : terrainY + 2.70);
@@ -1367,7 +1373,8 @@ export class SkyIsland {
    * 30 HP, 6 hand-punch hits to break, drops 1 Wood Log on break.
    */
   placeWoodStairs(x, z, rotationAngle = 0, customY = null, isSync = false) {
-    if (!isSync && !this.isConnectedToBuildOrGround(x, z)) return false;
+    let y = customY !== null ? customY : (this.getTerrainHeight(x, z) >= -1.0 ? this.getTerrainHeight(x, z) : 0);
+    if (!isSync && !this.isValidBuildPosition(x, y, z, 'wood_stairs')) return false;
     const terrainY = this.getTerrainHeight(x, z);
     const nearest = this.getNearestStructureAt(x, z);
 
@@ -1470,7 +1477,8 @@ export class SkyIsland {
    * matching the reference image from all viewing angles.
    */
   placeWoodBox(x, z, rotationAngle = 0, initialStorage = null, customY = null, isSync = false) {
-    if (!isSync && !this.isConnectedToBuildOrGround(x, z)) return false;
+    const y = customY !== null ? customY : (this.getTerrainHeight(x, z) >= -1.0 ? this.getTerrainHeight(x, z) : 0);
+    if (!isSync && !this.isValidBuildPosition(x, y, z, 'wood_box')) return false;
     const terrainY = this.getTerrainHeight(x, z);
     const nearest = this.getNearestStructureAt(x, z);
     const y = customY !== null ? customY : (terrainY >= -1.0 ? terrainY : (nearest ? nearest.y : 0));

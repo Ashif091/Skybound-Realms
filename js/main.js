@@ -554,41 +554,38 @@ class GameApp {
         return;
       }
 
+      let placed = false;
       if (activeItem.type === 'crafting_bench') {
-        this.island.placeCraftingBench(dropX, dropZ, placementAngle, checkY);
-        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'crafting_bench', checkY);
-        this.inventory.useActiveItem();
+        placed = this.island.placeCraftingBench(dropX, dropZ, placementAngle, checkY);
+        if (placed !== false && this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'crafting_bench', checkY);
       } else if (activeItem.type === 'wood_box') {
-        this.island.placeWoodBox(dropX, dropZ, placementAngle, null, checkY);
-        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_box', checkY);
-        this.inventory.useActiveItem();
+        placed = this.island.placeWoodBox(dropX, dropZ, placementAngle, null, checkY);
+        if (placed !== false && this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_box', checkY);
       } else if (activeItem.type === 'wood_wall') {
-        this.island.placeWoodWall(dropX, dropZ, placementAngle, checkY);
-        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall', checkY);
-        this.inventory.useActiveItem();
+        placed = this.island.placeWoodWall(dropX, dropZ, placementAngle, checkY);
+        if (placed !== false && this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall', checkY);
       } else if (activeItem.type === 'wood_wall_window') {
-        this.island.placeWoodWallWindow(dropX, dropZ, placementAngle, checkY);
-        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall_window', checkY);
-        this.inventory.useActiveItem();
+        placed = this.island.placeWoodWallWindow(dropX, dropZ, placementAngle, checkY);
+        if (placed !== false && this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall_window', checkY);
       } else if (activeItem.type === 'wood_wall_door') {
-        this.island.placeWoodWallDoor(dropX, dropZ, placementAngle, checkY);
-        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall_door', checkY);
-        this.inventory.useActiveItem();
+        placed = this.island.placeWoodWallDoor(dropX, dropZ, placementAngle, checkY);
+        if (placed !== false && this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_wall_door', checkY);
       } else if (activeItem.type === 'wood_floor') {
-        this.island.placeWoodFloor(dropX, dropZ, placementAngle, checkY);
-        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_floor', checkY);
-        this.inventory.useActiveItem();
+        placed = this.island.placeWoodFloor(dropX, dropZ, placementAngle, checkY);
+        if (placed !== false && this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_floor', checkY);
       } else if (activeItem.type === 'wood_roof') {
-        this.island.placeWoodRoof(dropX, dropZ, placementAngle, checkY);
-        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_roof', checkY);
-        this.inventory.useActiveItem();
+        placed = this.island.placeWoodRoof(dropX, dropZ, placementAngle, checkY);
+        if (placed !== false && this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_roof', checkY);
       } else if (activeItem.type === 'wood_stairs') {
-        this.island.placeWoodStairs(dropX, dropZ, placementAngle, checkY);
-        if (this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_stairs', checkY);
-        this.inventory.useActiveItem();
+        placed = this.island.placeWoodStairs(dropX, dropZ, placementAngle, checkY);
+        if (placed !== false && this.networkManager) this.networkManager.sendBlockPlaced(dropX, dropZ, placementAngle, 'wood_stairs', checkY);
       }
-      if (this.networkManager && this.inventory) {
-        this.networkManager.sendSaveInventory(this.inventory.getSlots(), this.playerHp || 100);
+
+      if (placed !== false) {
+        this.inventory.useActiveItem();
+        if (this.networkManager && this.inventory) {
+          this.networkManager.sendSaveInventory(this.inventory.getSlots(), this.playerHp || 100);
+        }
       }
       return;
     }
