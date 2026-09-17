@@ -202,6 +202,39 @@ export class NetworkManager {
         break;
       }
 
+      case 'doorToggleSync': {
+        // Apply door/window open state on remote clients
+        if (this.gameApp.island) {
+          const island = this.gameApp.island;
+          const s = island.placedStructures.find(s =>
+            Math.hypot(s.x - msg.x, s.z - msg.z) < 1.0 &&
+            Math.abs((s.y || 0) - (msg.y || 0)) < 1.0 &&
+            s.type === msg.blockType
+          );
+          if (s) {
+            s.isOpen = msg.isOpen;
+            if (s.type === 'wood_wall_door') {
+              s.doorHinge.rotation.y = s.isOpen ? Math.PI / 2 : 0;
+              if (s.centerColliders) {
+                if (s.isOpen) {
+                  s.centerColliders.forEach(c => {
+                    const idx = island.treeColliders.indexOf(c);
+                    if (idx !== -1) island.treeColliders.splice(idx, 1);
+                  });
+                } else {
+                  s.centerColliders.forEach(c => {
+                    if (!island.treeColliders.includes(c)) island.treeColliders.push(c);
+                  });
+                }
+              }
+            } else if (s.type === 'wood_wall_window') {
+              if (s.leftShutter) s.leftShutter.rotation.y = s.isOpen ? -1.4 : 0;
+              if (s.rightShutter) s.rightShutter.rotation.y = s.isOpen ? 1.4 : 0;
+            }
+          }
+        }
+        break;
+      }
 
       case 'boxStorageSync': {
         if (this.gameApp && this.gameApp.island) {
@@ -215,6 +248,8 @@ export class NetworkManager {
         }
         break;
       }
+
+
 
       case 'pickupSuccess': {
         if (this.gameApp.inventory && this.gameApp.itemDropManager) {
@@ -304,6 +339,17 @@ export class NetworkManager {
       y: y !== null ? Math.round(y * 100) / 100 : undefined,
       z: Math.round(z * 100) / 100,
       blockType
+    });
+  }
+
+  sendDoorToggle(x, z, y, blockType, isOpen) {
+    this.send({
+      type: 'doorToggle',
+      x: Math.round(x * 100) / 100,
+      y: y !== null ? Math.round(y * 100) / 100 : undefined,
+      z: Math.round(z * 100) / 100,
+      blockType,
+      isOpen
     });
   }
 

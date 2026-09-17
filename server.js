@@ -493,6 +493,24 @@ async function startServer() {
           break;
         }
 
+        case 'doorToggle': {
+          // Update isOpen on the matching placed block in world state
+          const doorBlock = worldState.placedBlocks.find(b =>
+            b.blockType === data.blockType &&
+            Math.hypot(b.x - data.x, b.z - data.z) < 1.0 &&
+            Math.abs((b.y || 0) - (data.y || 0)) < 1.0
+          );
+          if (doorBlock) {
+            doorBlock.isOpen = data.isOpen;
+            scheduleSaveWorld(); // persist the open/close state
+          }
+          // Broadcast to all OTHER players so they see the door/window move
+          broadcast({ type: 'doorToggleSync', x: data.x, y: data.y, z: data.z, blockType: data.blockType, isOpen: data.isOpen }, playerId);
+          break;
+        }
+
+
+
         case 'blockBroken': {
           const targetType = data.blockType;
           let removedCount = 0;

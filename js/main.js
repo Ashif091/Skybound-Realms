@@ -634,8 +634,13 @@ class GameApp {
         const actionName = structure.type === 'wood_wall_door' ? 'Door' : 'Window Shutter';
         this.inventory.showToast(`${actionName} ${structure.isOpen ? 'Opened' : 'Closed'}!`);
       }
+      // Stream the open/close state to all other players via WebSocket
+      if (this.networkManager) {
+        this.networkManager.sendDoorToggle(structure.x, structure.z, structure.y, structure.type, structure.isOpen);
+      }
       return;
     }
+
 
     // 4. Drop a log item (non-build active item)
     if (activeItem && activeItem.count > 0 && activeItem.type === 'log') {

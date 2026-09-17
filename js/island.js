@@ -1753,9 +1753,34 @@ export class SkyIsland {
         this.placeWoodWall(b.x, b.z, rot, y, true);
       } else if (type === 'wood_wall_window') {
         this.placeWoodWallWindow(b.x, b.z, rot, y, true);
+        // Restore open/close state from DB
+        if (b.isOpen) {
+          const s = this.placedStructures[this.placedStructures.length - 1];
+          if (s) {
+            s.isOpen = true;
+            if (s.leftShutter) s.leftShutter.rotation.y = -1.4;
+            if (s.rightShutter) s.rightShutter.rotation.y = 1.4;
+          }
+        }
       } else if (type === 'wood_wall_door') {
         this.placeWoodWallDoor(b.x, b.z, rot, y, true);
+        // Restore open/close state from DB
+        if (b.isOpen) {
+          const s = this.placedStructures[this.placedStructures.length - 1];
+          if (s) {
+            s.isOpen = true;
+            if (s.doorHinge) s.doorHinge.rotation.y = Math.PI / 2;
+            // Remove center colliders so door passage is open
+            if (s.centerColliders) {
+              s.centerColliders.forEach(c => {
+                const idx = this.treeColliders.indexOf(c);
+                if (idx !== -1) this.treeColliders.splice(idx, 1);
+              });
+            }
+          }
+        }
       } else if (type === 'wood_floor') {
+
         this.placeWoodFloor(b.x, b.z, rot, y, true);
       } else if (type === 'wood_roof') {
         this.placeWoodRoof(b.x, b.z, rot, y, true);
