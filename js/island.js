@@ -154,39 +154,43 @@ export class SkyIsland {
 
   getTerrainHeight(x, z) {
     const distFromCenter = Math.hypot(x / this.radiusX, z / this.radiusZ);
-    if (distFromCenter >= 0.95) return -50;
+    if (distFromCenter >= 0.96) return -50;
 
-    let baseH = 1.2 + Math.sin(x * 0.12) * Math.cos(z * 0.12) * 0.7 
-                     + Math.sin(x * 0.05 + z * 0.08) * 0.8;
+    let baseH = 1.2 + Math.sin(x * 0.12) * Math.cos(z * 0.12) * 0.4 
+                     + Math.sin(x * 0.05 + z * 0.08) * 0.5;
 
     const distPond = Math.hypot(x - this.pondX, z - this.pondZ);
-    if (distPond < 8.0) {
-      const blend = Math.min(1.0, (8.0 - distPond) / 2.2);
-      baseH = THREE.MathUtils.lerp(baseH, 1.6, blend);
-
+    if (distPond < 9.0) {
       if (distPond < this.pondRadius) {
-        const basinFactor = 1.0 - Math.pow(distPond / this.pondRadius, 2);
-        baseH -= basinFactor * 1.4;
+        // Inside pond basin: concave bowl dipping down to y = 0.20
+        const bowlFactor = 1.0 - Math.pow(distPond / this.pondRadius, 2);
+        baseH = THREE.MathUtils.lerp(1.25, 0.20, bowlFactor);
+      } else if (distPond < this.pondRadius + 3.5) {
+        // Raised shore rim/embankment holding the water inside the ground
+        const rimT = (distPond - this.pondRadius) / 3.5;
+        const rimBoost = Math.sin(rimT * Math.PI) * 0.45;
+        baseH += rimBoost;
       }
     }
 
-    if (distFromCenter > 0.84) {
-      const edgeFactor = (distFromCenter - 0.84) / (0.95 - 0.84);
-      return baseH - Math.pow(edgeFactor, 2) * 12.0;
+    if (distFromCenter > 0.85) {
+      const edgeFactor = (distFromCenter - 0.85) / (0.95 - 0.85);
+      baseH = THREE.MathUtils.lerp(baseH, 0.0, Math.min(1.0, edgeFactor));
     }
 
-    return baseH;
+    return Math.max(0.0, baseH);
   }
 
   buildIsland() {
-    const topGeo = new THREE.PlaneGeometry(80, 56, 44, 32);
+    // 1. Top Grass Surface — Low-Poly Grass Plateau with clean pond basin
+    const topGeo = new THREE.PlaneGeometry(80, 56, 52, 38);
     topGeo.rotateX(-Math.PI / 2);
 
     const pos = topGeo.attributes.position;
     const colors = [];
-    const colorGrassMeadow = new THREE.Color(0xd4fa6a); // Clean uniform 40% lighter spring green
-    const colorBasinMud = new THREE.Color(0xd8cbba);    // Very light shore sand
-    const colorCliff = new THREE.Color(0xbbb0a2);       // Soft light cliff tone
+    const colorGrassMeadow = new THREE.Color(0x7ec850); // Vibrant low-poly spring green
+    const colorBasinMud = new THREE.Color(0xebd49b);    // Light sandy shore
+    const colorDirtRim = new THREE.Color(0x56341f);     // Dark earth rim
 
     for (let i = 0; i < pos.count; i++) {
       let x = pos.getX(i);
@@ -204,17 +208,17 @@ export class SkyIsland {
       }
 
       const y = this.getTerrainHeight(x, z);
-      pos.setY(i, y === -50 ? -10.8 : y);
+      pos.setY(i, y === -50 ? 0.0 : y);
 
       let c = colorGrassMeadow.clone();
       const distPond = Math.hypot(x - this.pondX, z - this.pondZ);
 
-      if (distFromCenter > 0.84) {
-        const cliffMix = Math.min(1.0, (distFromCenter - 0.84) / 0.11);
-        c.lerp(colorCliff, cliffMix * 0.30);
-      } else if (distPond < this.pondRadius) {
-        const pondMix = 1.0 - (distPond / this.pondRadius);
-        c.lerp(colorBasinMud, pondMix * 0.25);
+      if (distFromCenter > 0.86) {
+        const cliffMix = Math.min(1.0, (distFromCenter - 0.86) / 0.09);
+        c.lerp(colorDirtRim, cliffMix);
+      } else if (distPond < this.pondRadius + 2.0) {
+        const pondMix = Math.max(0, 1.0 - (distPond / (this.pondRadius + 2.0)));
+        c.lerp(colorBasinMud, pondMix * 0.85);
       }
 
       colors.push(c.r, c.g, c.b);
@@ -223,13 +227,10 @@ export class SkyIsland {
     topGeo.computeVertexNormals();
     topGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
-    this.groundTexture = this.createGroundTexture();
-
     const topMat = new THREE.MeshStandardMaterial({
-      map: this.groundTexture,
       vertexColors: true,
-      flatShading: false, // Smooth shading to eliminate all triangle facet breaking lines
-      roughness: 0.88,
+      flatShading: true,
+      roughness: 0.85,
       metalness: 0.0
     });
 
@@ -240,43 +241,70 @@ export class SkyIsland {
 
     this.terrainMesh = topMesh;
 
-    // Island Underside
-    const botGeo = new THREE.ConeGeometry(36, 24, 16, 5, true);
-    botGeo.rotateX(Math.PI);
-    botGeo.translate(0, -12, 0);
+    // 2. Underside Rock — Low-Poly Inverted Cone Rock Formation matching reference image
+    const radialSegs = 16;
+    const heightSegs = 6;
+    const rockDepth = 26.0;
+
+    const botGeo = new THREE.CylinderGeometry(1.0, 0.01, rockDepth, radialSegs, heightSegs, false);
+    botGeo.translate(0, -rockDepth / 2, 0);
 
     const bPos = botGeo.attributes.position;
     for (let i = 0; i < bPos.count; i++) {
-      const x = bPos.getX(i);
-      const z = bPos.getZ(i);
+      const origX = bPos.getX(i);
       const y = bPos.getY(i);
-      
-      if (y > -22) {
-        const noise = Math.sin(x * 0.4 + y * 0.2) * Math.cos(z * 0.4) * 2.0;
-        bPos.setX(i, x + noise * 0.5);
-        bPos.setZ(i, z + Math.sin(y * 0.3) * 1.2);
-      } else {
+      const origZ = bPos.getZ(i);
+
+      if (y <= -rockDepth + 0.5) {
+        // Bottom Apex — single sharp point at (0, -rockDepth, 0)
         bPos.setX(i, 0);
+        bPos.setY(i, -rockDepth);
         bPos.setZ(i, 0);
-        bPos.setY(i, -24);
+      } else {
+        // Angle theta around central vertical Y axis
+        const angle = Math.atan2(origZ, origX);
+        // Normalized depth from 0 (top rim) to 1 (bottom tip)
+        const t = Math.min(1.0, Math.max(0.0, -y / rockDepth));
+        // Concave inward taper profile matching reference
+        const profileFactor = Math.pow(1.0 - t, 0.8);
+
+        // Scale to island oval radius (radiusX=38, radiusZ=26)
+        let rx = this.radiusX * 0.95 * profileFactor;
+        let rz = this.radiusZ * 0.95 * profileFactor;
+
+        // Faceted angular low-poly rock noise for middle segments
+        if (t > 0.05 && t < 0.92) {
+          const noiseX = Math.sin(angle * 3.0 + y * 0.3) * 1.2;
+          const noiseZ = Math.cos(angle * 3.0 + y * 0.25) * 1.2;
+          rx += noiseX;
+          rz += noiseZ;
+        }
+
+        bPos.setX(i, Math.cos(angle) * rx);
+        bPos.setZ(i, Math.sin(angle) * rz);
       }
     }
+
     botGeo.computeVertexNormals();
 
     const botMat = new THREE.MeshStandardMaterial({
-      color: 0x3d3128,
+      color: 0x54331d, // Rich warm brown rock
       flatShading: true,
-      roughness: 0.9,
-      metalness: 0.1
+      roughness: 0.88,
+      metalness: 0.04
     });
 
     const botMesh = new THREE.Mesh(botGeo, botMat);
+    botMesh.receiveShadow = true;
+    botMesh.castShadow = true;
     this.group.add(botMesh);
   }
 
+
   buildPond() {
-    const waterRadius = this.pondRadius * 0.96;
-    const waterDepth = 1.0;
+    const waterRadius = this.pondRadius * 0.92; // 4.78
+    const waterDepth = 0.7;
+    const waterLevelY = 0.85;
 
     const waterGeo = new THREE.CylinderGeometry(waterRadius, waterRadius * 0.85, waterDepth, 24);
 
@@ -285,17 +313,17 @@ export class SkyIsland {
       roughness: 0.1,
       metalness: 0.15,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.82,
       flatShading: true
     });
 
     const waterMesh = new THREE.Mesh(waterGeo, waterMat);
-    waterMesh.position.set(this.pondX, 1.05 - (waterDepth / 2), this.pondZ);
+    waterMesh.position.set(this.pondX, waterLevelY - (waterDepth / 2), this.pondZ);
     this.group.add(waterMesh);
 
-    // 1 Shore Rock
+    // Shore Rock
     const rockMat = new THREE.MeshStandardMaterial({ color: 0x64748b, flatShading: true, roughness: 0.8 });
-    const shoreRockX = this.pondX + 4.9;
+    const shoreRockX = this.pondX + 4.6;
     const shoreRockZ = this.pondZ + 0.6;
     const shoreRockY = this.getTerrainHeight(shoreRockX, shoreRockZ);
 
@@ -924,6 +952,9 @@ export class SkyIsland {
     wallGroup.add(rightShutter);
 
     this.group.add(wallGroup);
+
+    const px = Math.cos(rotationAngle);
+    const pz = -Math.sin(rotationAngle);
 
     // 5 Tight Colliders (radius 0.15m) along wall length
     const collidersWin = [

@@ -443,6 +443,7 @@ async function startServer() {
         }
 
         case 'blockPlaced': {
+          worldDirty = true; // Mark world dirty so saveWorldToDB persists to MongoDB
           const dupIdx = worldState.placedBlocks.findIndex(b =>
             Math.hypot(b.x - data.x, b.z - data.z) < 0.4 &&
             Math.abs((b.y || 0) - (data.y || 0)) < 0.4 &&
@@ -468,6 +469,7 @@ async function startServer() {
         }
 
         case 'boxStorageUpdate': {
+          worldDirty = true;
           let block = worldState.placedBlocks.find(b =>
             b.blockType === 'wood_box' && Math.hypot(b.x - data.x, b.z - data.z) < 1.0
           );
@@ -494,6 +496,7 @@ async function startServer() {
         }
 
         case 'doorToggle': {
+          worldDirty = true;
           // Update isOpen on the matching placed block in world state
           const doorBlock = worldState.placedBlocks.find(b =>
             b.blockType === data.blockType &&
@@ -512,6 +515,7 @@ async function startServer() {
 
 
         case 'blockBroken': {
+          worldDirty = true;
           const targetType = data.blockType;
           let removedCount = 0;
 
