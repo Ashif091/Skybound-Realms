@@ -67,7 +67,10 @@ const players = new Map(); // playerId -> { ws, data, email }
 
 // ── Save throttle for world ────────────────────────────────────────────────
 let saveWorldTimer = null;
+let worldDirty = false; // Only true when world state has actually changed since last DB load/save
+
 function scheduleSaveWorld() {
+  worldDirty = true; // Mark that something changed
   if (saveWorldTimer) clearTimeout(saveWorldTimer);
   saveWorldTimer = setTimeout(() => saveWorldToDB(), 2000);
 }
@@ -110,6 +113,7 @@ function loadWorldFromFile() {
 }
 
 async function saveWorldToDB() {
+  if (!worldDirty) return; // Nothing changed — skip to avoid overwriting a manual DB clear
   saveWorldToFile(); // Always maintain file backup
   if (!dbWorld) return;
   try {
@@ -124,6 +128,7 @@ async function saveWorldToDB() {
       },
       { upsert: true }
     );
+    worldDirty = false; // Reset after successful save
     console.log('[SAVE] World state saved to MongoDB.');
   } catch (err) {
     console.error('[SAVE] Failed to save world:', err.message);
@@ -224,6 +229,7 @@ async function startServer() {
     if (req.method === 'POST' && req.url === '/admin/reset-world') {
       // 1. Clear in-memory placed blocks
       worldState.placedBlocks = [];
+      worldDirty = true; // force save of the cleared state
       // 2. Persist cleared state to DB and file
       await saveWorldToDB();
       // 3. Broadcast cleared world to all connected clients
@@ -377,6 +383,7 @@ async function startServer() {
             if (worldDoc && Array.isArray(worldDoc.placedBlocks)) {
               freshBlocks = worldDoc.placedBlocks;
               worldState.placedBlocks = freshBlocks; // keep in-memory in sync with DB
+              worldDirty = false; // in-memory now matches DB — no save needed
               console.log(`[JOIN] Loaded ${freshBlocks.length} placed block(s) fresh from DB for ${playerData.name}.`);
             }
           } catch (err) {
@@ -546,7 +553,7 @@ async function startServer() {
         console.log(`[LEAVE] ${entry.data.name} (${playerId})`);
         players.delete(playerId);
         broadcast({ type: 'playerLeft', id: playerId });
-        await saveWorldToDB();
+        if (worldDirty) await saveWorldToDB(); // only save if something actually changed
       }
     });
 
@@ -563,6 +570,7 @@ function broadcast(msgObj, excludeId = null) {
 
 // ── Periodic world auto-save to MongoDB (every 60 seconds) ─────────────────
 setInterval(() => {
+  if (!worldDirty) return; // Nothing changed — skip
   saveWorldToDB().then(() => console.log('[AUTO-SAVE] World persisted to MongoDB.'));
 }, 60000);
 
