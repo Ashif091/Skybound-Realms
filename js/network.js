@@ -170,6 +170,39 @@ export class NetworkManager {
         break;
       }
 
+      case 'worldReset': {
+        // Server cleared all placed blocks — remove every placed structure from the scene
+        if (this.gameApp.island) {
+          const island = this.gameApp.island;
+          // Remove all placed structure meshes from scene
+          [...island.placedStructures].forEach(s => {
+            if (s.mesh) island.group.remove(s.mesh);
+            if (s.group) island.group.remove(s.group);
+            if (s.colliders) s.colliders.forEach(c => {
+              const idx = island.treeColliders.indexOf(c);
+              if (idx !== -1) island.treeColliders.splice(idx, 1);
+            });
+            if (s.collider) {
+              const idx = island.treeColliders.indexOf(s.collider);
+              if (idx !== -1) island.treeColliders.splice(idx, 1);
+            }
+          });
+          island.placedStructures = [];
+          // Remove all crafting tables/boxes
+          [...island.placedCraftingTables].forEach(t => {
+            if (t.group) island.group.remove(t.group);
+            if (t.collider) {
+              const idx = island.treeColliders.indexOf(t.collider);
+              if (idx !== -1) island.treeColliders.splice(idx, 1);
+            }
+          });
+          island.placedCraftingTables = [];
+          console.log('[WORLD] Server reset world — all placed structures cleared.');
+        }
+        break;
+      }
+
+
       case 'boxStorageSync': {
         if (this.gameApp && this.gameApp.island) {
           const box = this.gameApp.island.getNearWoodBox(msg.x, msg.z);

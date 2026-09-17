@@ -1,4 +1,5 @@
 import { WebSocketServer } from 'ws';
+import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -217,6 +218,31 @@ async function startServer() {
   const wss = new WebSocketServer({ port: PORT });
   console.log(`[SERVER] Skybound Realms game server running on port ${PORT}`);
 
+  // ── HTTP Admin Server (port 3001) for live world management ────────────────
+  const adminServer = http.createServer(async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (req.method === 'POST' && req.url === '/admin/reset-world') {
+      // 1. Clear in-memory placed blocks
+      worldState.placedBlocks = [];
+      // 2. Persist cleared state to DB and file
+      await saveWorldToDB();
+      // 3. Broadcast cleared world to all connected clients
+      const json = JSON.stringify({ type: 'init', yourId: null, players: [], trees: [], drops: [], placedBlocks: [] });
+      for (const [, p] of players) {
+        if (p.ws.readyState === 1) {
+          p.ws.send(JSON.stringify({ type: 'worldReset', placedBlocks: [] }));
+        }
+      }
+      console.log('[ADMIN] World placed blocks reset via HTTP endpoint.');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, message: 'placedBlocks cleared and broadcast to all clients.' }));
+    } else {
+      res.writeHead(404);
+      res.end('Not found');
+    }
+  });
+  adminServer.listen(3001, () => console.log('[ADMIN] Admin HTTP server on port 3001'));
+
   wss.on('connection', ws => {
     let playerId   = null;
     let playerEmail = null;
@@ -343,19 +369,35 @@ async function startServer() {
           .filter(p => p.data.id !== playerId)
           .map(p => p.data);
 
+        // Always fetch placedBlocks fresh from DB so clients always see the real persisted state
+        let freshBlocks = worldState.placedBlocks; // fallback: in-memory
+        if (dbWorld) {
+          try {
+            const worldDoc = await dbWorld.findOne({ _id: 'main' }, { projection: { placedBlocks: 1 } });
+            if (worldDoc && Array.isArray(worldDoc.placedBlocks)) {
+              freshBlocks = worldDoc.placedBlocks;
+              worldState.placedBlocks = freshBlocks; // keep in-memory in sync with DB
+              console.log(`[JOIN] Loaded ${freshBlocks.length} placed block(s) fresh from DB for ${playerData.name}.`);
+            }
+          } catch (err) {
+            console.error('[JOIN] Failed to load placedBlocks from DB, using in-memory fallback:', err.message);
+          }
+        }
+
         ws.send(JSON.stringify({
           type:         'init',
           yourId:       playerId,
           players:      existingPlayers,
           trees:        Array.from(worldState.trees.values()),
           drops:        Array.from(worldState.drops.values()),
-          placedBlocks: worldState.placedBlocks
+          placedBlocks: freshBlocks
         }));
 
         broadcast({ type: 'playerJoined', player: playerData }, playerId);
         console.log(`[JOIN] ${playerData.name} (${playerId}). Online: ${players.size}`);
         return;
       }
+
 
       // ── In-game messages (require joined player) ───────────────────────
       if (!playerId || !players.has(playerId)) return;
