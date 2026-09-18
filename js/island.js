@@ -590,15 +590,66 @@ export class SkyIsland {
   }
 
   /**
-   * Respawns broken trees randomly across valid island land when a new day starts (brings total trees to 25)
+   * Returns true if position (rx, rz) is safe to spawn a tree:
+   * — Not too close to another tree
+   * — Not overlapping any static rock / obstacle collider
+   * — Not overlapping any player-placed structure or crafting table
    */
-  respawnTrees(targetCount = 25) {
-    const missingCount = targetCount - this.trees.length;
-    if (missingCount <= 0) return;
+  isClearForTree(rx, rz) {
+    // Existing trees
+    if (this.trees.some(t => Math.hypot(rx - t.x, rz - t.z) < 3.2)) return false;
 
+    // Static colliders (rocks etc.) — identified by not having a tree 'id' property or having large radius
+    for (const c of this.treeColliders) {
+      if (c.id !== undefined) continue; // Skip tree-owned colliders
+      if (Math.hypot(rx - c.x, rz - c.z) < c.radius + 1.8) return false;
+    }
+
+    // Placed building structures (walls, floors, roofs, stairs, boxes)
+    if (this.placedStructures.some(s => Math.hypot(rx - s.x, rz - s.z) < 2.5)) return false;
+
+    // Placed crafting tables and wood boxes
+    if (this.placedCraftingTables.some(t => Math.hypot(rx - t.x, rz - t.z) < 2.5)) return false;
+
+    return true;
+  }
+
+  /**
+   * Respawns trees on new day.
+   * — If authorizedPositions is provided (from server), removes all existing trees and
+   *   spawns exactly those positions (server-authoritative, guarantees all clients match).
+   * — If no authorizedPositions, fills missing trees using random positions validated
+   *   against structures and rocks (isClearForTree).
+   */
+  respawnTrees(targetCount = 25, authorizedPositions = null) {
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, flatShading: true });
     const foliageMat1 = new THREE.MeshStandardMaterial({ color: 0x4ade80, flatShading: true });
     const foliageMat2 = new THREE.MeshStandardMaterial({ color: 0x22c55e, flatShading: true });
+
+    if (authorizedPositions && authorizedPositions.length > 0) {
+      // ── Server-authoritative path: wipe all current trees, respawn from exact list ──
+      [...this.trees].forEach(tree => {
+        this.group.remove(tree.group);
+        const cIndex = this.treeColliders.indexOf(tree.collider);
+        if (cIndex !== -1) this.treeColliders.splice(cIndex, 1);
+      });
+      this.trees = [];
+
+      authorizedPositions.forEach((pos, i) => {
+        const y = this.getTerrainHeight(pos.x, pos.z);
+        if (y < 0.2) return; // Skip underwater or below-cliff spots
+        this.spawnSingleTree(
+          pos.x, pos.z, y,
+          pos.id ?? (Date.now() + i),
+          trunkMat, foliageMat1, foliageMat2
+        );
+      });
+      return;
+    }
+
+    // ── Fallback path: fill only missing trees, check structures & rocks ──
+    const missingCount = targetCount - this.trees.length;
+    if (missingCount <= 0) return;
 
     let spawned = 0;
     let attempts = 0;
@@ -615,9 +666,8 @@ export class SkyIsland {
       const ry = this.getTerrainHeight(rx, rz);
       if (ry < 0.2) continue;
 
-      // Check distance from existing trees to prevent overlap
-      const tooClose = this.trees.some(t => Math.hypot(rx - t.x, rz - t.z) < 3.2);
-      if (tooClose) continue;
+      // Unified collision check: trees + rocks + placed structures
+      if (!this.isClearForTree(rx, rz)) continue;
 
       const treeId = Date.now() + spawned;
       this.spawnSingleTree(rx, rz, ry, treeId, trunkMat, foliageMat1, foliageMat2);

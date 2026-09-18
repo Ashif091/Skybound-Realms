@@ -561,9 +561,60 @@ async function startServer() {
         }
 
         case 'respawnTrees': {
+          // ── Server-authoritative tree respawn ─────────────────────────────
+          // Generate new positions server-side so every client gets the exact same trees.
+          const radiusX = 38, radiusZ = 26;
+          const pondX = -8, pondZ = 5;
+
+          // Same fixed base positions as buildEnvironmentDetails on the client
+          const basePositions = [
+            [-15, 8], [-20, -10], [-25, 5], [-8, 14], [-26, -2],
+            [-18, 15], [-22, -14], [0, 16], [12, -8], [-12, -16],
+            [18, 10], [22, -4], [25, 8], [15, 15], [24, -10],
+            [8, -18], [-5, -18], [5, 18], [-15, -18], [18, -18],
+            [26, 2], [-28, 2], [20, -16], [-22, 12], [28, -6]
+          ];
+
+          const newTrees = [];
+          const now = Date.now();
+
+          // First: use deterministic base positions (filtered for island/pond bounds)
+          basePositions.forEach(([x, z], idx) => {
+            if (newTrees.length >= 25) return;
+            const distFromCenter = Math.hypot(x / radiusX, z / radiusZ);
+            const distPond = Math.hypot(x - pondX, z - pondZ);
+            if (distFromCenter > 0.82 || distPond < 7.5) return;
+            const tooClose = newTrees.some(t => Math.hypot(x - t.x, z - t.z) < 3.2);
+            if (tooClose) return;
+            newTrees.push({ x, z, id: now + idx });
+          });
+
+          // Then: fill remaining slots with random positions
+          let attempts = 0;
+          while (newTrees.length < 25 && attempts < 300) {
+            attempts++;
+            const rx = (Math.random() - 0.5) * 54;
+            const rz = (Math.random() - 0.5) * 40;
+            const distFromCenter = Math.hypot(rx / radiusX, rz / radiusZ);
+            const distPond = Math.hypot(rx - pondX, rz - pondZ);
+            if (distFromCenter > 0.78 || distPond < 7.5) continue;
+            const tooClose = newTrees.some(t => Math.hypot(rx - t.x, rz - t.z) < 3.2);
+            if (tooClose) continue;
+            newTrees.push({ x: Math.round(rx * 10) / 10, z: Math.round(rz * 10) / 10, id: now + 100 + attempts });
+          }
+
+          // Clear all broken-tree records — new day means fresh state
           worldState.trees.clear();
+          worldDirty = true;
           scheduleSaveWorld();
-          broadcast({ type: 'treesRespawnedSync' }, playerId);
+
+          // Broadcast to ALL connected players (including the triggering client) so
+          // every player spawns the same set of trees at the same positions
+          const respawnPayload = JSON.stringify({ type: 'treesRespawnedSync', trees: newTrees });
+          for (const [, p] of players) {
+            if (p.ws.readyState === 1) p.ws.send(respawnPayload);
+          }
+          console.log(`[TREES] New day — ${newTrees.length} trees respawned and broadcast to ${players.size} player(s).`);
           break;
         }
       }

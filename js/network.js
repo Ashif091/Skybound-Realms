@@ -266,7 +266,10 @@ export class NetworkManager {
       }
 
       case 'treesRespawnedSync': {
-        if (this.gameApp.island) this.gameApp.island.respawnTrees(25);
+        // Server sent authoritative tree positions — spawn exactly those on every client
+        if (this.gameApp.island) {
+          this.gameApp.island.respawnTrees(25, msg.trees || null);
+        }
         break;
       }
 

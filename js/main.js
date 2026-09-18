@@ -44,7 +44,8 @@ class GameApp {
     // 12-Minute Day & Night Cycle System
     this.dayNight = new DayNightCycle(this.scene);
     this.dayNight.onNewDayCallback = () => {
-      if (this.island) this.island.respawnTrees(25);
+      // Tell server a new day started — server will generate authoritative tree positions
+      // and broadcast treesRespawnedSync to ALL players (including us) so everyone is in sync
       if (this.networkManager) this.networkManager.send({ type: 'respawnTrees' });
     };
 
